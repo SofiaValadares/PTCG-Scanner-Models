@@ -1,4 +1,4 @@
-"""python -m cropper photo.jpg  |  python -m cropper export FOLDER"""
+"""python -m cropper photo.jpg [--preview]  |  python -m cropper export FOLDER"""
 
 from __future__ import annotations
 

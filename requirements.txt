@@ -1,4 +1,3 @@
-# Notebook dependencies (install PyTorch CUDA separately; see below).
 # RTX 50-series (Blackwell / sm_120) needs a cu128+ wheel:
 #   .venv\Scripts\python.exe -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 
@@ -10,10 +9,8 @@ matplotlib
 pillow
 onnx
 onnxsim
-ipykernel
-jupyter
 easyocr
 rapidocr
 pymupdf
-# Optional: notebooks/train_ocr.ipynb comparison
+# Optional: python -m train ocr (Tesseract baseline)
 # pytesseract

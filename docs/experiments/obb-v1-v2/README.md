@@ -23,7 +23,7 @@ Original plots: [`figures/v1/`](figures/v1/) and [`figures/v2/`](figures/v2/).
 | Mixup | 0 | **0.05** |
 | Random erase | 0.4 | **0.15** |
 | Train time (RTX 5060) | ~5 min | ~11 min |
-| Weights | `src/detection/runs/obb/obb-v1/weights/obb-v1.pt` | `src/detection/runs/obb/obb-v2/weights/obb-v2.pt` |
+| Weights | `runs/detection/obb/obb-v1/weights/obb-v1.pt` | `runs/detection/obb/obb-v2/weights/obb-v2.pt` |
 
 Two kinds of numbers:
 

@@ -36,7 +36,7 @@ set PDF or photo
     → compare to identify GT (OBB IoU) or the CSV next to the PDF
 ```
 
-Nothing in the full pipeline **trains** a model. Training lives in the two train notebooks. The cropper has no trainable weights of its own; it consumes the detector.
+Nothing in the full pipeline **trains** a model. Training is `python -m train all` (or `detector` / `roi` / `ocr` one at a time). The cropper has no trainable weights of its own; it consumes the detector.
 
 Typical settings used in the thesis experiments: card confidence **0.8**, OCR-ROI confidence **0.4**, about **20 seconds per PDF page** on a consumer GPU (detect + crop + OCR).
 
@@ -44,46 +44,39 @@ Typical settings used in the thesis experiments: card confidence **0.8**, OCR-RO
 
 ## Repository layout
 
-Code for the three stages is grouped under **`src/`** so the root only has docs, notebooks, and data.
+The **pipeline** and **training CLIs** sit at the repo root. Library code is **`src/`**. Datasets, trained weights, and dumps stay out of `src/`.
 
 ```
 PTCG Scanner/
-├── README.md, LICENSE, NOTICE, CITATION.cff
-├── requirements.txt, pyproject.toml
-├── notebooks/                 Jupyter (all experiments)
-│   ├── pipeline.ipynb         photos → catalog (start here)
-│   ├── train_detector.ipynb   train the card OBB model
-│   ├── train_roi.ipynb        train the text-band OBB (name / number / set)
-│   ├── train_ocr.ipynb        compare EasyOCR / RapidOCR / Tesseract on data/ocr/
-│   └── crop_cards.ipynb       inspect 63×88 mm crops
-├── src/
-│   ├── detection/             Ultralytics card-detector runs
-│   ├── cropper/               warp / enhance / CLI
-│   ├── roi/                   Ultralytics text-band runs
-│   └── ocr/                   read_card.py + OCR eval
-├── data/                      catalog, datasets, pipeline input
-│   ├── catalog/{lang}/        cards.csv + sets.csv (pipeline uses `en`)
-│   ├── detection/             card OBB dataset
-│   ├── roi/                   text-band OBB dataset
-│   └── input/                 photos (or PDFs) for the pipeline
-├── output/                    pipeline dumps (CSV, plots, per-stage PDFs)
-└── docs/                      longer guides + training comparison figures
+├── pipeline.py                photos/PDF → catalog (start here)
+├── train/
+│   ├── detector/              python -m train detector
+│   ├── roi/                   python -m train roi
+│   └── ocr/                   python -m train ocr
+├── src/                       cropper, roi, ocr (code only)
+├── data/                      catalog + local datasets
+├── models/                    export weights: obb-v6.pt, ocr-roi-v3.pt
+├── pretrained/                official YOLO downloads (gitignored)
+├── runs/                      training dumps (gitignored)
+├── output/                    pipeline + cropper dumps
+└── docs/                      guides + experiment reports
 ```
 
 | Path | You use it for |
 |---|---|
-| [`notebooks/pipeline.ipynb`](notebooks/pipeline.ipynb) | Full pipeline on `data/identify/` (or `data/input/`) |
-| [`src/detection/`](src/detection/) | Card detector: `weights/` (official `.pt`) and `runs/obb/` |
-| [`src/cropper/`](src/cropper/) | `python -m cropper` after putting `src` on `PYTHONPATH` |
-| [`src/roi/`](src/roi/) | Strip detector: `ocr-roi-v2` in production; v3 is the architecture sweep |
-| [`src/ocr/`](src/ocr/) | `read_card.py` and the OCR test spreadsheet |
+| [`pipeline.py`](pipeline.py) | Full pipeline on `data/identify/` (or `--source input`) |
+| [`train/`](train/) | `python -m train all` or `detector` / `roi` / `ocr` |
+| [`src/cropper/`](src/cropper/) | `python -m cropper` |
+| [`src/roi/`](src/roi/) | Strip detector package; pipeline uses **ocr-roi-v3** |
+| [`src/ocr/`](src/ocr/) | `read_card.py` |
 | [`data/`](data/README.md) | Catalog, training datasets, and pipeline photos |
-| [`output/`](output/README.md) | Stage-by-stage PDFs to debug OBB vs crop vs OCR vs match |
+| [`models/`](models/README.md) | `obb-v6.pt` (detector) and `ocr-roi-v3.pt` (ROI) — the files to export |
+| [`pretrained/`](pretrained/README.md) | Official Ultralytics downloads used when training |
+| [`runs/`](runs/README.md) | Local training dumps (all families, plots, `last.pt`) |
+| [`output/`](output/README.md) | Relatório: `pdfs/`, `tables/`, `figures/`, `cropper/` |
 | [`docs/`](docs/README.md) | Detector metrics, cropper/OCR details, version comparisons |
 
-Training images (`data/detection/{train,valid,test}/`, `data/roi/{train,valid,test}/`) and `.pt` weights are **not** in Git. Unzip the Roboflow YOLOv8 OBB exports locally. Photos you drop in `data/input/` are also local.
-
-Notebooks work with the working directory at the **repo root** or inside **`notebooks/`**; they walk parents until they see `src/cropper/rectify.py`.
+Training images (`data/detection/{train,valid,test}/`, `data/roi/{train,valid,test}/`), `runs/`, and `pretrained/` stay out of Git. The two production checkpoints in [`models/`](models/README.md) are the ones meant to go on GitHub. Unzip the Roboflow YOLOv8 OBB exports locally. Photos you drop in `data/input/` are also local.
 
 ---
 
@@ -91,7 +84,7 @@ Notebooks work with the working directory at the **repo root** or inside **`note
 
 **Catalog.** `data/catalog/{lang}/` holds `cards.csv` (`Name`, `Number`, `Rarity`, `setId`, [PkmnCards](https://pkmncards.com/sets/) codes) and `sets.csv` (set id → display name). The pipeline defaults to `en`. Other folders overlay TCGdex names when that language has the card.
 
-**Eval.** [`notebooks/pipeline.ipynb`](notebooks/pipeline.ipynb) defaults to `data/identify/` (class name = `SET number name`, boxes matched by IoU). `EVAL_SOURCE = "input"` uses photos in `data/input/` and an optional sibling CSV in **row order**.
+**Eval.** [`pipeline.py`](pipeline.py) defaults to `data/identify/` (class name = `SET number name`, boxes matched by IoU). `--source input` uses photos in `data/input/` and an optional sibling CSV in **row order**.
 
 **Training (local).** Unzip the Roboflow YOLOv8 OBB export of [PTCG Scanner - Detection](https://universe.roboflow.com/pokemon-tcc/ptcg-scanner-detection) into `data/detection/`, and [PTCG Scanner - ROI](https://universe.roboflow.com/pokemon-tcc/ptcg-scanner-roi) into `data/roi/`. Details: [`docs/detection.md`](docs/detection.md), [`docs/roi.md`](docs/roi.md).
 
@@ -115,30 +108,34 @@ GPU is strongly recommended (YOLO). RapidOCR runs on ONNX Runtime.
 
 ### 2. Weights
 
-After training (or after copying runs onto this machine):
+Production checkpoints live in [`models/`](models/README.md) (this is what you copy or commit):
 
-- Card detector: `src/detection/runs/obb/obb-v6/weights/obb-v6.pt` (pipeline and cropper). Official YOLO downloads: `src/detection/weights/`. Fallback: `src/cropper/weights/obb-v5.pt`.
-- Text bands: `src/roi/runs/ocr-roi-v3/weights/ocr-roi-v3.pt` (pipeline; fallback v2, then v1). Official YOLO downloads: `src/detection/weights/`.
+- Card detector: `models/obb-v6.pt` (pipeline and cropper). Fallback: `runs/…/obb-v6.pt`, then `src/cropper/weights/obb-v5.pt`.
+- Text bands: `models/ocr-roi-v3.pt` (pipeline). Fallback: `runs/roi/ocr-roi-v3/`.
+- OCR: **no `.pt` of ours**. RapidOCR ships ONNX inside the Python package. `python -m train ocr` only ranks engines.
 
-The cropper looks for **v6**, then v5, then v4, then v3, then `PTCG_CROPPER_WEIGHTS`. Inference size is **960** for v6/v5/v4 and **800** for v3.
+Official Ultralytics downloads used as training starts go to [`pretrained/`](pretrained/README.md). The cropper looks for **v6**, then v5, then v4, then v3, then `PTCG_CROPPER_WEIGHTS`. Inference size is **960** for v6/v5/v4 and **800** for v3.
 
 ### 3. Full pipeline
 
-Open [`notebooks/pipeline.ipynb`](notebooks/pipeline.ipynb) and run all cells (`EVAL_SOURCE = "identify"` by default). For ad-hoc photos, set `EVAL_SOURCE = "input"` and drop files in `data/input/`.
+```powershell
+python pipeline.py
+python pipeline.py --source input
+python pipeline.py --max-images 20
+```
 
-Identify mode writes global CSVs plus three report PDFs. Per-file stage dumps (`pdfs/<name>/00`–`05`) are only written when `SAVE_STAGES` is on (`EVAL_SOURCE = "input"`).
+Default eval is `data/identify/`. For ad-hoc photos, `--source input` and drop files in `data/input/`.
+
+Identify mode writes [`output/README.md`](output/README.md) (tables + figures, like the training reports), plus CSVs and three debug PDFs. Per-file stage dumps (`pdfs/<name>/00`–`05`) are only written when `SAVE_STAGES` is on (`EVAL_SOURCE = "input"`).
 
 | Output | Meaning |
 |---|---|
-| `output/pdfs/01_obb.pdf` | card boxes on each photo |
-| `output/pdfs/03_acertos.pdf` | catalog hits, ROI bands on the crop |
-| `output/pdfs/03_erros.pdf` | catalog misses: crop + ROI + LIDO × CORRETO |
-| `output/pipeline_extract.csv` | OCR + catalog match (`orient_deg` is 0 or 180) |
-| `output/pipeline_eval.csv` | per-slot ROI source, OCR fields, catalog hit |
-| `output/pipeline_metrics.csv` | ROI / OCR / end-to-end summary |
-| `output/pipeline_*.png` | funnel, ROI coverage, OCR, catalog plots |
+| `output/README.md` | Pipeline eval report (tables + figures) |
+| `output/pdfs/` | `01_obb.pdf`, `03_acertos.pdf`, `03_erros.pdf` |
+| `output/tables/` | `pipeline_extract.csv`, `eval`, `metrics`, `errors` |
+| `output/figures/` | funnel / ROI / OCR / catalog plots |
 
-The card detector already has YOLO mAP in [`docs/detection.md`](docs/detection.md). The pipeline notebook adds:
+The card detector already has YOLO mAP in [`docs/detection.md`](docs/detection.md). The pipeline also reports:
 
 1. **ROI** — strip detector mAP on `data/roi` (if the test split is present), plus how often each band came from YOLO vs the template.
 2. **OCR** — name / number / collection accuracy vs the spreadsheet (when present), and mean character error rate (CER).
@@ -150,23 +147,37 @@ A catalog hit at a given slot is **name (PT or EN) or number** matching the spre
 
 ```powershell
 $env:PYTHONPATH="src"
-.\.venv\Scripts\python.exe -m cropper path\to\photo.jpg --out src\cropper\output\cards --conf 0.8
+.\.venv\Scripts\python.exe -m cropper path\to\photo.jpg --out output\cropper\cards --conf 0.8
 ```
 
-Each card becomes `*_card_00_0.96.jpg` (color). Preview notebook: [`notebooks/crop_cards.ipynb`](notebooks/crop_cards.ipynb).
+Each card becomes `*_card_00_0.96.jpg` (color). Add `--preview` to also write a contact sheet `preview.jpg` in `--out`.
 
-To ship the cropper to another folder (code + `.pt`):
+To ship the **cropper** (code + detector `.pt`) to another project:
 
 ```powershell
-python -m cropper export C:\other-project\ptcg_cropper
+$env:PYTHONPATH="src"
+.\.venv\Scripts\python.exe -m cropper export C:\other-project\ptcg_cropper
 ```
+
+The weight it copies is `models/obb-v6.pt` (YOLOv26). The ROI model for the full pipeline is `models/ocr-roi-v3.pt` — copy that separately if the other project also reads text; the cropper export is only detect + warp.
 
 ### 5. Train models
 
+Each command writes a **README in that training folder** (`train/detector/`, `train/roi/`, `train/ocr/`) with tables of every candidate, compressed graphs of every candidate, and a section on the elected model. `--pdf` adds a small `report.pdf` in the same folder (gitignored — attach it to the thesis; do not put it on GitHub). The terminal shows epoch, mAP, ETA and VRAM on one updating line.
+
+```powershell
+$env:PYTHONPATH="src"   # skip if you already ran pip install -e .
+python -m train all                   # detector → roi → ocr (hours)
+python -m train detector              # obb-v6: YOLOv26 / 12 / 8 / RT-DETR / 11
+python -m train roi                   # ocr-roi-v3: YOLOv26 / 12 / 8 / 11
+python -m train ocr                   # EasyOCR vs RapidOCR vs Tesseract
+python -m train detector --report-only --pdf   # reuse ranking.csv + best.pt
+```
+
 1. Unzip the Roboflow YOLOv8 OBB zips into `data/detection/` and `data/roi/`.
-2. [`notebooks/train_detector.ipynb`](notebooks/train_detector.ipynb) — **obb-v6** trains YOLOv26 / 12 / 8 / RT-DETR / 11 and keeps the best (YOLOv26s, val mAP50-95 ≈ 0.994). Plots for every family are in the notebook; write-up: [`docs/experiments/obb-v6`](docs/experiments/obb-v6/README.md). Pipeline and cropper use that winner. Earlier: [`docs/experiments/obb-v3-v5`](docs/experiments/obb-v3-v5/README.md).
-3. [`notebooks/train_roi.ipynb`](notebooks/train_roi.ipynb) — **ocr-roi-v3** trains YOLOv26 / 12 / 8 / 11 on the text bands (same v2 augmentation; per-class mAP). Each family has its own metrics/plots section; the winner is elected at the end. Pipeline still loads **ocr-roi-v2** until you copy it.
-4. [`notebooks/train_ocr.ipynb`](notebooks/train_ocr.ipynb) — does **not** train a recognizer. It crops the labeled boxes in `data/ocr/` (class name = ground-truth text) and ranks EasyOCR, RapidOCR/Paddle, and Tesseract.
+2. `python -m train detector` — **obb-v6** keeps the best (YOLOv26s, val mAP50-95 ≈ 0.994). Pipeline and cropper use that winner. Write-up: [`train/detector/`](train/detector/README.md). Earlier: [`docs/experiments/obb-v3-v5`](docs/experiments/obb-v3-v5/README.md).
+3. `python -m train roi` — **ocr-roi-v3** on the text bands. Pipeline uses **ocr-roi-v3**.
+4. `python -m train ocr` — does **not** train a recognizer. Ranks EasyOCR, RapidOCR/Paddle, and Tesseract on `data/ocr/`.
 
 Label **printed card edges**, not binder plastic, or the crop (and then OCR) will include the sleeve.
 

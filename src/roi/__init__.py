@@ -1,1 +1,1 @@
-"""Text-band (ROI) detector. Dataset and Ultralytics runs live here."""
+"""Text-band (ROI) detector. Trained weights live in runs/roi/."""

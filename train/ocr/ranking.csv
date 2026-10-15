@@ -1,0 +1,4 @@
+winner,motor,exact_clean,exact_raw,CER_clean,CER_raw,vazio_%,ms/caixa,n,WER_nome
+←,RapidOCR (Paddle),81.17,79.67,0.1538,0.1453,7.98,11.7,664,0.2538
+,EasyOCR,53.01,50.9,0.3299,0.3047,16.57,35.3,664,0.2955
+,Tesseract,29.52,25.9,0.602,0.59,51.51,104.9,664,0.6043

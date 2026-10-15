@@ -2,49 +2,40 @@
 venv/
 .env
 __pycache__/
-.ipynb_checkpoints/
 .python-version
 
-# Roboflow datasets (download locally)
-dataset/
-src/detection/dataset/
-src/roi/data/
-data/detection/train/
-data/detection/valid/
-data/detection/test/
-data/roi/train/
-data/roi/valid/
-data/roi/test/
-src/ocr/data/train/
-src/ocr/data/valid/
-src/ocr/data/test/
+# Roboflow datasets (unzip locally)
+data/detection/
+data/roi/
+data/ocr/
+data/identify/
 data/input/*
 !data/input/.gitkeep
 !data/input/README.md
 
-# Training / weights
-# Official Ultralytics checkpoints belong in src/detection/weights/ (gitignored by *.pt).
-# Do not leave yolo*.pt / rtdetr*.pt in the repo root or notebooks/.
-runs/
-src/detection/runs/
-src/roi/runs/
-src/ocr/runs/
-/weights/
+# Training artifacts (local GPU dumps)
+runs/*
+!runs/README.md
+
+# Official Ultralytics downloads (not our trained models)
+pretrained/*
+!pretrained/README.md
+
+# Production export weights in models/ are tracked; everything else stays out
 *.pt
+!models/*.pt
 *.onnx
 *.engine
 wandb/
 
-# Cropper dumps
+# Cropper image dumps
+output/cropper/
 src/cropper/output/
 src/cropper/weights/*.pt
 
-# Local dumps
-data/detection/
-data/roi/
-data/identify/
-data/ocr/
-data/orc/
+# Sweep reports: README + figures stay in git; PDFs are for the thesis
+docs/experiments/**/report.pdf
+train/**/report.pdf
 
 Thumbs.db
 Desktop.ini

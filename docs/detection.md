@@ -2,11 +2,11 @@
 
 Finds each card and estimates box rotation. It does **not** segment pixels and does **not** read the Pokémon name. Rectified crops: [`cropper.md`](cropper.md).
 
-Train in [`notebooks/train_detector.ipynb`](../notebooks/train_detector.ipynb). Official Ultralytics `.pt` files download to [`src/detection/weights/`](../src/detection/weights/README.md). Trained runs: `src/detection/runs/obb/` (gitignored).
+Train with `python -m train detector` (from the repo root; `PYTHONPATH=src` or `pip install -e .`). Official Ultralytics `.pt` files download to [`pretrained/`](../pretrained/README.md). Production export: [`models/obb-v6.pt`](../models/README.md). Training dumps: `runs/detection/obb/` (gitignored). The versioned report is [`train/detector/README.md`](../train/detector/README.md). `--pdf` writes a thesis PDF next to it (gitignored).
 
-The **pipeline** (`notebooks/pipeline.ipynb`) and the cropper CLI use **obb-v6** (`imgsz=960`, `conf=0.8`). Fallback: bundled `obb-v5.pt`, then v4 / v3.
+The **pipeline** (`pipeline.py`) and the cropper CLI use **obb-v6** (`imgsz=960`, `conf=0.8`). Fallback: bundled `obb-v5.pt`, then v4 / v3.
 
-Architecture sweep (v6): [obb-v6](experiments/obb-v6/README.md) · Version swaps: [obb-v3 vs v5](experiments/obb-v3-v5/README.md) · [obb-v2 vs v3](experiments/obb-v2-v3/README.md) · [obb-v1 vs v2](experiments/obb-v1-v2/README.md) (historical).
+Architecture sweep (v6): [`train/detector`](../train/detector/README.md) · Version swaps: [obb-v3 vs v5](experiments/obb-v3-v5/README.md) · [obb-v2 vs v3](experiments/obb-v2-v3/README.md) · [obb-v1 vs v2](experiments/obb-v1-v2/README.md) (historical).
 
 ## Dataset (Roboflow zip, not in Git)
 
@@ -29,15 +29,15 @@ Label the **printed card edge**, not the binder sleeve. Otherwise OCR inherits p
 
 ## Training (`obb-v6` sweep)
 
-`VERSION = "v6"`. One model per family (YOLOv26s, YOLOv12n-OBB from yaml, YOLOv8s, RT-DETR-L AABB, YOLOv11s), same v5 augmentation. Cap **300 epochs**, early stop `patience=40`. The notebook elects the winner in section 5 (mAP50-95, then speed) and shows val/test plots **only for that winner** (section 6).
+`python -m train detector`. One model per family (YOLOv26s, YOLOv12n-OBB from yaml, YOLOv8s, RT-DETR-L AABB, YOLOv11s), same v5 augmentation. Cap **300 epochs**, early stop `patience=40`. Winner: best val mAP50-95, then lowest infer ms among models within **0.002**. The report includes val/test tables **and** curves for every family.
 
-Winner: **YOLOv26s-OBB** — val mAP50-95 **0.9938**, test **0.9939**, ~8 ms. Full table: [`experiments/obb-v6/README.md`](experiments/obb-v6/README.md).
+Winner: **YOLOv26s-OBB** — val mAP50-95 **0.9938**, test **0.9939**, ~8 ms. Full table: [`train/detector/README.md`](../train/detector/README.md).
 
-Weights: `src/detection/runs/obb/obb-v6/weights/obb-v6.pt`. Pretrained downloads: `src/detection/weights/yolo26s-obb.pt` (etc.).
+Weights: `models/obb-v6.pt`. Pretrained downloads: `pretrained/yolo26s-obb.pt` (etc.).
 
 ## Training (`obb-v5`)
 
-In the notebook, `VERSION = "v5"`. Fine-tune from `obb-v3.pt`. Same edge recipe as the unused v4 line (`imgsz=960`, mosaic/erasing off, higher box/DFL/angle, AdamW) **plus** stronger HSV and pose augmentation.
+For **obb-v5** (historical), `VERSION = "v5"`. Fine-tune from `obb-v3.pt`. Same edge recipe as the unused v4 line (`imgsz=960`, mosaic/erasing off, higher box/DFL/angle, AdamW) **plus** stronger HSV and pose augmentation.
 
 | Item | v3 | v4 (recipe only) | **v5 (production)** |
 |---|---|---|---|
@@ -52,7 +52,7 @@ In the notebook, `VERSION = "v5"`. Fine-tune from `obb-v3.pt`. Same edge recipe 
 
 Mosaic, mixup, copy-paste, random erasing, and perspective stay off: they warp or hide the card rectangle the cropper warps to 63×88 mm.
 
-Weights: `src/detection/runs/obb/obb-v5/weights/obb-v5.pt`. The cropper prefers **obb-v6** when that file exists.
+Weights: `runs/detection/obb/obb-v5/weights/obb-v5.pt`. The cropper prefers **obb-v6** when that file exists.
 
 ## `obb-v5` results
 
@@ -90,8 +90,8 @@ Confusion-matrix **plots** are not used in the report: with one class `card` the
 ```python
 from ultralytics import YOLO
 
-model = YOLO("src/detection/runs/obb/obb-v5/weights/obb-v5.pt")
+model = YOLO("runs/detection/obb/obb-v5/weights/obb-v5.pt")
 results = model.predict("data/detection/test/images", conf=0.8, imgsz=960, save=True)
 ```
 
-`data/detection/{train,valid,test}/` and `src/detection/runs/` are gitignored. Official checkpoints: [`src/detection/weights/`](../src/detection/weights/README.md). Plots for v5: [`experiments/obb-v5/`](experiments/obb-v5/). Sweep v6: [`experiments/obb-v6/`](experiments/obb-v6/).
+`data/detection/{train,valid,test}/` and `runs/` are gitignored. Official checkpoints: [`pretrained/`](../pretrained/README.md). Export: [`models/`](../models/README.md). Plots for v5: [`experiments/obb-v5/`](experiments/obb-v5/). Sweep v6: [`train/detector/`](../train/detector/README.md).

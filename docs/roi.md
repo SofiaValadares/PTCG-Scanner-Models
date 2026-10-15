@@ -2,7 +2,7 @@
 
 The cropper delivers the full card (63×88 mm). This stage finds the **text bands** with YOLOv8 OBB (`name`, `number`, `colection`). It does **not** read the characters.
 
-Notebook: [`notebooks/train_roi.ipynb`](../notebooks/train_roi.ipynb). Pipeline checkpoint: **ocr-roi-v3**.
+Train: `python -m train roi`. Pipeline checkpoint: **ocr-roi-v3**. Report: [`train/roi/README.md`](../train/roi/README.md).
 
 Reading: [`ocr.md`](ocr.md). Card detector metrics (1 class, no per-class table): [`detection.md`](detection.md).
 
@@ -23,13 +23,13 @@ Class `colection` (Roboflow typo) is **missing on many cards** — only when the
 
 ## Training (`ocr-roi-v3` sweep)
 
-`VERSION = "v3"`. One OBB model per family (YOLOv26s, YOLOv12n from yaml, YOLOv8s, YOLOv11s), same v2 augmentation. Official checkpoints: [`src/detection/weights/`](../src/detection/weights/README.md). RT-DETR is skipped (no OBB). Cap **300 epochs**, early stop `patience=40`. Section **5** picks the winner (val mAP50-95, then speed); section **6** shows **per-class** metrics and plots **only for that winner**. Ranking table: [`experiments/ocr-roi-v3`](experiments/ocr-roi-v3/README.md) (empty until the notebook finishes).
+`VERSION = "v3"`. One OBB model per family (YOLOv26s, YOLOv12n from yaml, YOLOv8s, YOLOv11s), same v2 augmentation. Official checkpoints: [`pretrained/`](../pretrained/README.md). RT-DETR is skipped (no OBB). Cap **300 epochs**, early stop `patience=40`. The CLI elects the winner (val mAP50-95, then speed) and writes **per-class** metrics plus plots for every family. Ranking table: [`train/roi`](../train/roi/README.md).
 
 The **pipeline** uses **ocr-roi-v3**. On each crop it calls this detector **twice** (0° and 180°) and keeps printed-up layout before OCR — see [`ocr.md`](ocr.md).
 
 ## Training (`ocr-roi-v2`)
 
-In an older notebook run, `VERSION = "v2"`. Fine-tune from `ocr-roi-v1.pt` if present, else `yolov8n-obb.pt`.
+In an older run, `VERSION = "v2"`. Fine-tune from `ocr-roi-v1.pt` if present, else `yolov8n-obb.pt`.
 
 Augmentation follows the **same idea as obb-v5** (HSV h/s/v `0.02 / 0.7 / 0.5`) but **weaker geometry**: the card is already 63×88 mm.
 
@@ -57,10 +57,10 @@ Unlike the card detector (`nc=1`), **per-class AP is required**: `name`, `number
 
 Do **not** treat ROI mAP as OCR accuracy. Character error is [`ocr.md`](ocr.md).
 
-The notebook explains each number **before** `model.val()`, then reports val and test. Confusion-matrix **counts** are kept (3-way mix-ups). The normalized matrix is still misleading on the background column.
+The report explains each number, then lists val and test. Confusion-matrix **counts** are kept (3-way mix-ups). The normalized matrix is still misleading on the background column.
 
-Weights: `src/roi/runs/ocr-roi-v3/weights/ocr-roi-v3.pt`. Fallback: v2, then v1.
+Weights: `models/ocr-roi-v3.pt`. Fallback: `runs/roi/ocr-roi-v3/`, then v2, then v1.
 
-Splits and `src/roi/runs/` are gitignored.
+Splits and `runs/` are gitignored.
 
 Part of [PTCG Scanner](../README.md). License: [CC BY-NC 4.0](../LICENSE).

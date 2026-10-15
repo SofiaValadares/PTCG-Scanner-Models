@@ -2,7 +2,7 @@
 
 Takes the OBB box and returns the **whole card**, front-facing, at Pokémon card size.
 
-It does **not** train a model and does **not** read the name. Training: [`notebooks/train_detector.ipynb`](../notebooks/train_detector.ipynb). Preview: [`notebooks/crop_cards.ipynb`](../notebooks/crop_cards.ipynb).
+It does **not** train a model and does **not** read the name. Training: `python -m train detector`. Preview: `python -m cropper photo.jpg --preview`.
 
 ## Output
 
@@ -18,7 +18,7 @@ photo  →  OBB (rotated box)  →  63×88 mm warp
       →  color JPEG
 ```
 
-**90°** (carta deitada) is fixed here. **180°** (printed upside-down) is **not**: the cropper’s “top” is the top of the photo. [`notebooks/pipeline.ipynb`](../notebooks/pipeline.ipynb) runs the ROI detector at 0° and 180° and keeps the orientation where `name` sits above `number`.
+**90°** (carta deitada) is fixed here. **180°** (printed upside-down) is **not**: the cropper’s “top” is the top of the photo. [`pipeline.py`](../pipeline.py) runs the ROI detector at 0° and 180° and keeps the orientation where `name` sits above `number`.
 
 The OBB must sit on the **printed edge**. If the annotation includes the pocket, the crop inherits it.
 
@@ -28,8 +28,8 @@ From the repo root (`PYTHONPATH` must include `src/`):
 
 ```powershell
 $env:PYTHONPATH="src"
-.\.venv\Scripts\python.exe -m cropper path\to\photo.jpg --out src\cropper\output\cards --conf 0.8
-.\.venv\Scripts\python.exe -m cropper data\detection\test\images --out src\cropper\output\cards --conf 0.8
+.\.venv\Scripts\python.exe -m cropper path\to\photo.jpg --out output\cropper\cards --conf 0.8
+.\.venv\Scripts\python.exe -m cropper data\detection\test\images --out output\cropper\cards --conf 0.8
 ```
 
 ## Export to another project
@@ -45,7 +45,7 @@ python -m pip install -e C:\other-project\ptcg_cropper
 ptcg-crop photo.jpg --out cards
 ```
 
-Weights go in `ptcg_cropper/weights/` (default **obb-v6.pt**, then v5 / v4 / v3). Alternative: `PTCG_CROPPER_WEIGHTS` or `--weights`. Official Ultralytics downloads used when training live in [`src/detection/weights/`](../src/detection/weights/README.md).
+The file copied is [`models/obb-v6.pt`](../models/README.md). In the destination it lands in `ptcg_cropper/weights/` (then v5 / v4 / v3 fallbacks). Alternative: `PTCG_CROPPER_WEIGHTS` or `--weights`. Official Ultralytics downloads used when training live in [`pretrained/`](../pretrained/README.md).
 
 | Item | Default |
 |---|---|

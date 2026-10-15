@@ -1,8 +1,7 @@
 # ROI — text bands on the cropped card
 
-YOLOv8 OBB with three classes on the 63×88 mm crop: `name`, `number`, `colection`. Train sweep: **ocr-roi-v3**. Pipeline uses **ocr-roi-v3**.
+Three OBB classes on the 63×88 mm crop: `name`, `number`, `colection`. Sweep: **ocr-roi-v3**. Pipeline uses [`models/ocr-roi-v3.pt`](../../models/README.md).
 
-This folder is **only** the strip detector (weights). Dataset: [`data/roi/`](../../data/roi/). Reading the pixels is [`../ocr/`](../ocr/).
+Dataset: [`data/roi/`](../../data/roi/). Reading the pixels is [`../ocr/`](../ocr/).
 
-Docs: [`docs/roi.md`](../../docs/roi.md)  
-Train: [`notebooks/train_roi.ipynb`](../../notebooks/train_roi.ipynb)
+`python -m train roi` → [`train/roi`](../../train/roi/README.md)

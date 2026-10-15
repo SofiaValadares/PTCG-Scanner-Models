@@ -1,12 +1,11 @@
 # Source
 
-All pipeline stages live here so the repo root stays documentation, notebooks, and data.
+Library code for the pipeline stages. Training CLIs are [`../train/`](../train/). The full run is [`../pipeline.py`](../pipeline.py).
 
 | Folder | Stage |
 |---|---|
-| [`detection/`](detection/) | Card detector (`weights/` official `.pt`, `runs/` experiments) |
-| [`cropper/`](cropper/) | Perspective warp to 63×88 mm |
-| [`roi/`](roi/) | YOLOv8 OBB **text-band** detector (weights) |
-| [`ocr/`](ocr/) | RapidOCR on those bands (`read_card.py`, scripts from `data/catalog/`) |
+| [`cropper/`](cropper/) | Perspective warp to 63×88 mm (`python -m cropper`) |
+| [`roi/`](roi/) | Text-band detector package |
+| [`ocr/`](ocr/) | RapidOCR on those bands (`read_card.py`) |
 
-Written guides: [`docs/`](../docs/).
+Weights: [`../models/`](../models/) (export). Training dumps: [`../runs/`](../runs/). Official YOLO downloads: [`../pretrained/`](../pretrained/). Guides: [`../docs/`](../docs/).

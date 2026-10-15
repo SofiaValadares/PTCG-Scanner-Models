@@ -18,8 +18,5 @@ keywords = ["pokemon", "tcg", "yolo", "obb", "ocr", "tcc"]
 License = "https://creativecommons.org/licenses/by-nc/4.0/"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["cropper*", "ocr*", "roi*"]
+packages = ["cropper", "ocr", "roi", "train", "train.common", "train.detector", "train.roi", "train.ocr"]
+package-dir = {"" = "src", "train" = "train"}

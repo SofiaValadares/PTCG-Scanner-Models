@@ -4,7 +4,7 @@ Each language folder has `cards.csv` (`Name`, `Number`, `Rarity`, `setId`) and `
 
 `Number` and `setId` are the [PkmnCards](https://pkmncards.com/sets/) codes used by the pipeline. `Name` (and set names in `sets.csv`) follow that language when [TCGdex](https://api.tcgdex.net/v2/{lang}/cards) has the card; otherwise the English name is kept.
 
-The pipeline (`notebooks/pipeline.ipynb`) reads every `data/catalog/{lang}/` so a Japanese print can match `ja/` even when `CATALOG_LANG` is `en`. Switch `CATALOG_LANG` to prefer that language’s set names when two rows tie.
+The pipeline (`pipeline.py`) reads every `data/catalog/{lang}/` so a Japanese print can match `ja/` even when `--catalog-lang` is `en`. Pass `--catalog-lang ja` to prefer that language’s set names when two rows tie.
 
 | Folder | Language |
 |---|---|

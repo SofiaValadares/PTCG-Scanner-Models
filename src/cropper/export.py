@@ -29,25 +29,25 @@ def find_weights_to_copy(explicit: Path | None = None) -> Path:
     env = os.environ.get("PTCG_CROPPER_WEIGHTS") or os.environ.get("TCG_CROPPER_WEIGHTS")
     if env:
         return Path(env).expanduser().resolve()
+    export_dir = REPO_ROOT / "models"
     bundled = PACKAGE_DIR / "weights"
-    runs = REPO_ROOT / "src" / "detection" / "runs" / "obb"
+    new_runs = REPO_ROOT / "runs" / "detection" / "obb"
+    old_runs = REPO_ROOT / "src" / "detection" / "runs" / "obb"
+    runs = new_runs if new_runs.is_dir() else old_runs
     for name, rel in (
         ("obb-v6.pt", "obb-v6/weights/obb-v6.pt"),
         ("obb-v5.pt", "obb-v5/weights/obb-v5.pt"),
         ("obb-v4.pt", "obb-v4/weights/obb-v4.pt"),
         ("obb-v3.pt", "obb-v3/weights/obb-v3.pt"),
     ):
-        candidate = bundled / name
-        if candidate.is_file():
-            return candidate
-        candidate = runs / rel
-        if candidate.is_file():
-            return candidate
+        for candidate in (export_dir / name, bundled / name, runs / rel):
+            if candidate.is_file():
+                return candidate
     if bundled.is_dir():
         pts = sorted(bundled.glob("*.pt"))
         if pts:
             return pts[0]
-    return runs / "obb-v6" / "weights" / "obb-v6.pt"
+    return export_dir / "obb-v6.pt"
 
 
 def export_cropper(dest: Path, weights: Path | None = None) -> Path:
@@ -59,7 +59,7 @@ def export_cropper(dest: Path, weights: Path | None = None) -> Path:
     if not src_weights.is_file():
         raise FileNotFoundError(
             f"Weights not found: {src_weights}\n"
-            "Train the detector (obb-v6) or pass --weights path\\obb-v6.pt"
+            "Missing models/obb-v6.pt. Train the detector or pass --weights."
         )
 
     dest.mkdir(parents=True, exist_ok=True)

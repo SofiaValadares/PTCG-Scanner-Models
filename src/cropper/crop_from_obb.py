@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import cv2
+import numpy as np
 from ultralytics import YOLO
 
 try:
@@ -17,12 +18,19 @@ except ImportError:
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PACKAGE_DIR.parent.parent
-_RUNS = REPO_ROOT / "src" / "detection" / "runs" / "obb"
-_V6_WEIGHTS = _RUNS / "obb-v6" / "weights" / "obb-v6.pt"
-_V5_WEIGHTS = _RUNS / "obb-v5" / "weights" / "obb-v5.pt"
-_V4_WEIGHTS = _RUNS / "obb-v4" / "weights" / "obb-v4.pt"
-_V3_WEIGHTS = _RUNS / "obb-v3" / "weights" / "obb-v3.pt"
-DEFAULT_OUTPUT = PACKAGE_DIR / "output"
+
+
+def _in_scanner_repo() -> bool:
+    return (REPO_ROOT / "pipeline.py").is_file() and (REPO_ROOT / "train").is_dir()
+
+
+def _detection_obb_runs() -> Path:
+    new = REPO_ROOT / "runs" / "detection" / "obb"
+    old = REPO_ROOT / "src" / "detection" / "runs" / "obb"
+    return new if new.is_dir() else old
+
+
+DEFAULT_OUTPUT = REPO_ROOT / "output" / "cropper" if _in_scanner_repo() else PACKAGE_DIR / "output"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 
 
@@ -34,27 +42,26 @@ def imgsz_for_weights(weights: Path) -> int:
 
 
 def find_default_weights() -> Path:
-    """Weights: env, then v6, then older bundled/runs copies."""
+    """Weights: env, then models/, then v6…v3 bundled/runs copies."""
     env = os.environ.get("PTCG_CROPPER_WEIGHTS") or os.environ.get("TCG_CROPPER_WEIGHTS")
     if env:
         return Path(env)
+    export_dir = REPO_ROOT / "models"
     bundled = PACKAGE_DIR / "weights"
-    for name, run_path in (
-        ("obb-v6.pt", _V6_WEIGHTS),
-        ("obb-v5.pt", _V5_WEIGHTS),
-        ("obb-v4.pt", _V4_WEIGHTS),
-        ("obb-v3.pt", _V3_WEIGHTS),
-    ):
-        candidate = bundled / name
-        if candidate.is_file():
-            return candidate
-        if run_path.is_file():
-            return run_path
+    runs = _detection_obb_runs()
+    for name in ("obb-v6.pt", "obb-v5.pt", "obb-v4.pt", "obb-v3.pt"):
+        for candidate in (
+            export_dir / name,
+            bundled / name,
+            runs / name.replace(".pt", "") / "weights" / name,
+        ):
+            if candidate.is_file():
+                return candidate
     if bundled.is_dir():
         pts = sorted(bundled.glob("*.pt"))
         if pts:
             return pts[0]
-    return _V3_WEIGHTS
+    return export_dir / "obb-v6.pt"
 
 
 DEFAULT_WEIGHTS = find_default_weights()
@@ -70,6 +77,32 @@ def collect_images(source: Path) -> list[Path]:
     if not files:
         raise FileNotFoundError(f"No images in {source}")
     return files
+
+
+def write_preview(paths: list[Path], dest: Path, cols: int = 5, cell=(186, 260)) -> Path | None:
+    if not paths:
+        return None
+    tiles = []
+    for path in paths:
+        img = cv2.imread(str(path))
+        if img is None:
+            continue
+        tiles.append(cv2.resize(img, cell))
+    if not tiles:
+        return None
+    cols = max(1, min(cols, len(tiles)))
+    rows = (len(tiles) + cols - 1) // cols
+    pad = rows * cols - len(tiles)
+    if pad:
+        tiles.extend([np.zeros((cell[1], cell[0], 3), dtype=tiles[0].dtype)] * pad)
+    grid_rows = []
+    for r in range(rows):
+        chunk = tiles[r * cols : (r + 1) * cols]
+        grid_rows.append(cv2.hconcat(chunk))
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(dest), cv2.vconcat(grid_rows))
+    print(f"Preview: {dest}")
+    return dest
 
 
 def save_crops(stem: str, crops, out_dir: Path) -> list[Path]:
@@ -103,7 +136,7 @@ def run(
                 f"OBB weights not found: {weights}\n"
                 "Pass --weights, set PTCG_CROPPER_WEIGHTS, "
                 "export the cropper (python -m cropper export ...) "
-                "or train under src/detection/."
+                "or train with `python -m train detector`."
             )
         model = YOLO(str(weights))
         print(f"OBB weights: {weights}  imgsz={imgsz}")
@@ -167,6 +200,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Shrink the card and paint a light border (off by default).",
     )
+    parser.add_argument(
+        "--preview",
+        action="store_true",
+        help="Also write a contact-sheet JPEG in --out (replaces the old crop_cards notebook).",
+    )
     return parser.parse_args()
 
 
@@ -175,7 +213,7 @@ def main() -> int:
     device: str | int = args.device
     if str(device).isdigit():
         device = int(device)
-    run(
+    saved = run(
         source=args.source,
         weights=args.weights,
         out_dir=args.out,
@@ -188,6 +226,8 @@ def main() -> int:
         enhance=not args.no_enhance,
         frame=args.frame,
     )
+    if args.preview:
+        write_preview(saved, args.out / "preview.jpg")
     return 0
 
 

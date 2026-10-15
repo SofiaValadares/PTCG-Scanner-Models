@@ -23,7 +23,7 @@ v3 aimed at a **tighter printed edge** (mAP50-95 / DFL / angle), not at finding 
 | Mosaic off | last 15 epochs | **last 40** |
 | Epochs run | 120 / 120 | **99 / 120** (early stop, patience 30) |
 | Time (RTX 5060) | ~11 min | ~27 min |
-| Weights | `src/detection/runs/obb/obb-v2/weights/obb-v2.pt` | `src/detection/runs/obb/obb-v3/weights/obb-v3.pt` |
+| Weights | `runs/detection/obb/obb-v2/weights/obb-v2.pt` | `runs/detection/obb/obb-v3/weights/obb-v3.pt` |
 
 Two kinds of numbers:
 
