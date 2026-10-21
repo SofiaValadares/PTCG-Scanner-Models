@@ -122,7 +122,7 @@ def _gray(image: np.ndarray) -> np.ndarray:
 
 
 def enhance_strip(image: np.ndarray, min_h: int = 112) -> np.ndarray:
-    """Amplia e aumenta contraste — faixas de binder são baixas e JPEG-comprimidas."""
+    """Amplia a faixa em cinza. Invert ganhou 1 p.p. no sweep; fica fora por não ser significativo."""
     gray = _gray(image)
     h, w = gray.shape[:2]
     if h < min_h:
@@ -132,9 +132,7 @@ def enhance_strip(image: np.ndarray, min_h: int = 112) -> np.ndarray:
             (max(8, int(round(w * scale))), min_h),
             interpolation=cv2.INTER_CUBIC,
         )
-    gray = cv2.createCLAHE(clipLimit=2.6, tileGridSize=(4, 4)).apply(gray)
-    blur = cv2.GaussianBlur(gray, (0, 0), 0.9)
-    return cv2.addWeighted(gray, 1.55, blur, -0.55, 0)
+    return gray
 
 
 def _strip_variants(gray: np.ndarray) -> list[np.ndarray]:

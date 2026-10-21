@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
+
+_SRC = Path(__file__).resolve().parent.parent / "src"
+if _SRC.is_dir() and str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
 
 JOBS = ("detector", "roi", "ocr")
 
@@ -10,13 +15,11 @@ Treinos do PTCG Scanner.
   python -m train all        [--report-only] [--pdf] [--no-plots]
   python -m train detector   [--report-only] [--pdf] [--no-plots]
   python -m train roi        [--report-only] [--pdf] [--no-plots]
-  python -m train ocr        [--report-only] [--pdf] [--max-boxes N]
+  python -m train ocr        [--report-only] [--pdf] [--max-boxes N] [--treatments]
 
 `all` roda detector -> roi -> ocr, nesta ordem (cada um pode levar horas).
-Na raiz do repo, se `pip install -e .` não foi feito:
-
-  $env:PYTHONPATH="src"
-
+`python -m train ocr` grava motores e tratamentos no mesmo README (`train/ocr`).
+`--treatments` refaz só o sweep de pré-processamento.
 Cada comando grava o relatório na pasta do treino (train/detector, train/roi, train/ocr).
 --pdf gera report.pdf no mesmo diretório (gitignored; use no TCC).
 A barra de progresso (época, mAP, ETA, VRAM) atualiza na mesma linha do terminal.

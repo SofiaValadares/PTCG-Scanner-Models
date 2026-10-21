@@ -11,7 +11,6 @@ train/
 ```
 
 ```powershell
-$env:PYTHONPATH="src"   # skip if pip install -e .
 python -m train all                 # detector → roi → ocr
 python -m train detector
 python -m train roi

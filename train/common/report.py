@@ -263,12 +263,37 @@ def write_ocr_readme(
     n_readable: int,
     n_illegible: int,
     notes: list[str],
+    heading: str = "ocr-cmp-v1 — comparação de motores de OCR",
+    intro: str = (
+        "Relatório gerado por `python -m train ocr`. **Não treina** um reconhecedor: "
+        "compara motores (EasyOCR, RapidOCR, Tesseract) **e** pré-processamentos da faixa "
+        "nas caixas anotadas de `data/ocr/`. O detector de ROI não entra neste laço."
+    ),
+    ranking_title: str = "Ranking (motores)",
+    elect_title: str = "Motor eleito",
+    elect_line: str | None = None,
+    treat_summary: pd.DataFrame | None = None,
+    treat_by_tipo: pd.DataFrame | None = None,
+    treat_winner: str | None = None,
+    treat_figures: list[tuple[str, Path]] | None = None,
+    treat_elect_line: str | None = None,
+    mix_log: list[str] | None = None,
+    mix_summary: pd.DataFrame | None = None,
+    mix_winner: str | None = None,
+    mix_elect_line: str | None = None,
+    mix_figures: list[tuple[str, Path]] | None = None,
+    worth: dict | None = None,
 ) -> Path:
     docs_dir.mkdir(parents=True, exist_ok=True)
+    if elect_line is None:
+        elect_line = (
+            f"**{winner}** entra em `src/ocr/read_card.py` e no pipeline. "
+            "EasyOCR e Tesseract ficam como baseline deste *benchmark*."
+        )
     lines = [
-        "# ocr-cmp-v1 — comparação de motores de OCR",
+        f"# {heading}",
         "",
-        "Relatório gerado por `python -m train ocr`. **Não treina** um reconhecedor: compara EasyOCR, RapidOCR (Paddle ONNX) e Tesseract nas caixas anotadas de `data/ocr/`. O detector de ROI não entra neste laço.",
+        intro,
         "",
         "Ranking: maior **exact_clean** nas caixas legíveis; empate < 1 p.p. desempata no CER; depois latência.",
         "",
@@ -287,23 +312,79 @@ def write_ocr_readme(
         [
             f"- Caixas legíveis no ranking: **{n_readable}**. Ilegíveis (fora do ranking): {n_illegible}.",
             "",
-            "## Ranking (todas as engines)",
+            f"## {ranking_title}",
             "",
             markdown_table(summary),
             "",
-            f"## Motor eleito",
+            f"## {elect_title}",
             "",
-            f"**{winner}** entra em `src/ocr/read_card.py` e no pipeline. EasyOCR e Tesseract ficam como baseline deste *benchmark*.",
+            elect_line,
             "",
-            "## Acerto por tipo de faixa",
+            "## Acerto por tipo de faixa (motores)",
             "",
             markdown_table(by_tipo),
             "",
-            "## Figuras",
-            "",
         ]
     )
-    for title, path in figures:
+    if treat_summary is not None and not treat_summary.empty:
+        if treat_elect_line is None and treat_winner:
+            treat_elect_line = (
+                f"**{treat_winner}** teve o melhor exact_clean entre os pré-processamentos. "
+                "A produção (`enhance_strip`) é só upscale, sem CLAHE."
+            )
+        lines.extend(
+            [
+                "## Ranking (técnicas individuais, RapidOCR fixo)",
+                "",
+                markdown_table(treat_summary),
+                "",
+                "## Técnica eleita (rodada 1)",
+                "",
+                treat_elect_line or "",
+                "",
+            ]
+        )
+        if treat_by_tipo is not None and not treat_by_tipo.empty:
+            lines.extend(
+                [
+                    "## Acerto por tipo de faixa (tratamentos)",
+                    "",
+                    markdown_table(treat_by_tipo),
+                    "",
+                ]
+            )
+    if mix_log or mix_winner:
+        lines.extend(
+            [
+                "## Busca gulosa (mistura final)",
+                "",
+                "As cinco técnicas entram sozinhas na tabela acima. A melhor vira a raiz. "
+                "Cada ramo mistura uma das que faltam: se o exact_clean **piorar**, o ramo para; "
+                "se **melhorar**, continua com as restantes. O relatório traz o caminho percorrido, "
+                "não o produto cartesiano.",
+                "",
+                "### Caminho",
+                "",
+            ]
+        )
+        lines.extend(mix_log or ["- (nenhuma mistura avaliada)"])
+        lines.append("")
+        lines.extend(
+            [
+                "### Mistura final",
+                "",
+                f"**{mix_winner or 'upscale'}**.",
+                "",
+            ]
+        )
+        if mix_elect_line:
+            lines.extend([mix_elect_line, ""])
+    if worth:
+        lines.extend(["## Vale a pena?", ""])
+        lines.extend(worth.get("md") or [worth.get("verdict") or ""])
+        lines.append("")
+    lines.extend(["## Figuras", ""])
+    for title, path in list(figures) + list(treat_figures or []) + list(mix_figures or []):
         rel = path.relative_to(docs_dir).as_posix()
         lines.append(f"**{title}**")
         lines.append("")

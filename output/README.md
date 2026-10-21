@@ -17,7 +17,7 @@ A eleição dos pesos (obb-v6 / ocr-roi-v3) está nos READMEs de `train/`.
 
 ## Resultado
 
-**Catalog hit 3315/3476 (95.4%)**. Um acerto é nome (PT ou EN) **ou** número batendo com a linha do ground truth.
+**Catalog hit 3359/3476 (96.6%)**. Um acerto é nome (PT ou EN) **ou** número batendo com a linha do ground truth.
 
 ## Métricas por etapa
 
@@ -55,27 +55,27 @@ A eleição dos pesos (obb-v6 / ocr-roi-v3) está nos READMEs de `train/`.
 
 | Métrica | Valor |
 | --- | --- |
-| accuracy | 64.9% |
-| mean CER | 0.360 |
+| accuracy | 65.1% |
+| mean CER | 0.359 |
 
 ### OCR number
 
 | Métrica | Valor |
 | --- | --- |
-| accuracy | 71.2% |
-| mean CER | 0.264 |
+| accuracy | 80.7% |
+| mean CER | 0.190 |
 
 ### OCR collection
 
 | Métrica | Valor |
 | --- | --- |
-| accuracy vs set name | 5.1% |
+| accuracy vs set name | 4.8% |
 
 ### End-to-end
 
 | Métrica | Valor |
 | --- | --- |
-| catalog hit | 95.4% |
+| catalog hit | 96.6% |
 
 ## Figuras
 

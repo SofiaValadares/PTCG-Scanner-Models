@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 
@@ -77,3 +78,6 @@ def resolve_pretrained(name: str, weights_cache: Path) -> str:
 
 def chdir_repo(repo: Path) -> None:
     os.chdir(repo)
+    src = str(repo / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
