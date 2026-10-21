@@ -108,7 +108,7 @@ GPU is strongly recommended (YOLO). RapidOCR runs on ONNX Runtime.
 
 ### 2. Weights
 
-Production checkpoints live in [`models/`](models/README.md) (this is what you copy or commit):
+Production checkpoints live in [`models/`](models/README.md) (local only — **not** on GitHub):
 
 - Card detector: `models/obb-v6.pt` (pipeline and cropper). Fallback: `runs/…/obb-v6.pt`, then `src/cropper/weights/obb-v5.pt`.
 - Text bands: `models/ocr-roi-v3.pt` (pipeline). Fallback: `runs/roi/ocr-roi-v3/`.

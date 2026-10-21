@@ -486,11 +486,12 @@ def match_catalog(
     set_id: str = "",
     top_n: int = 3,
 ) -> pd.DataFrame:
-    """Nome pesa mais que o numero, e o numero mais que a colecao."""
-    # 0.1 a mais no nome (100) supera numero e colecao juntos (85).
+    """Só tenta acertar a carta se o OCR leu o número. Sem número, não chuta."""
     name_w, name_exact = 1000.0, 40.0
     number_w, number_near, total_w, set_w = 50.0, 15.0, 25.0, 10.0
     collector, total = parse_number(ocr_number)
+    if collector is None:
+        return pd.DataFrame(columns=["name", "number", "set_id", "set_name", "rarity", "lang", "score"])
     query = fold(ocr_name)
     collection_ids = set()
     if set_id:
@@ -513,11 +514,11 @@ def match_catalog(
         near_cat = names if query else catalog
         near = near_cat["collector"].notna() & (near_cat["collector"] - collector).abs().le(2)
         parts.append(near_cat.loc[near])
-    if not parts and collection_ids:
-        parts.append(catalog.loc[catalog["set_id"].isin(collection_ids)])
-    pool = catalog if not parts else pd.concat(parts).drop_duplicates()
+    if not parts:
+        return pd.DataFrame(columns=["name", "number", "set_id", "set_name", "rarity", "lang", "score"])
+    pool = pd.concat(parts).drop_duplicates()
     if pool.empty:
-        pool = catalog
+        return pd.DataFrame(columns=["name", "number", "set_id", "set_name", "rarity", "lang", "score"])
 
     scored = pool.copy()
     scores = np.zeros(len(scored), dtype=np.float32)

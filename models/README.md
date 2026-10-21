@@ -9,6 +9,6 @@ Pesos treinados que a pipeline, o cropper e o `python -m cropper export` usam. D
 
 Não há `.pt` de OCR: `python -m train ocr` só compara engines. A produção usa RapidOCR (ONNX vem com o pacote).
 
-`runs/` continua sendo o dump do Ultralytics (todas as famílias, `last.pt`, gráficos). Não suba `runs/` no GitHub — só estes dois pesos (~21 MB + ~22 MB, abaixo do limite de 100 MB sem Git LFS).
+`runs/` continua sendo o dump do Ultralytics (todas as famílias, `last.pt`, gráficos). **Não suba `.pt` no GitHub** — estes dois arquivos ficam só na máquina (`.gitignore`). Depois de clonar, rode o treino ou copie os pesos de um backup local.
 
 Depois de um treino novo, a eleição copia o vencedor para cá de novo.

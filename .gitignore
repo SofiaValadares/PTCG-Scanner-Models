@@ -21,9 +21,8 @@ runs/*
 pretrained/*
 !pretrained/README.md
 
-# Production export weights in models/ are tracked; everything else stays out
+# Pesos .pt ficam só na máquina — não sobem no GitHub
 *.pt
-!models/*.pt
 *.onnx
 *.engine
 wandb/
