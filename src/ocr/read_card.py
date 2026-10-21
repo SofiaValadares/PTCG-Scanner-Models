@@ -23,7 +23,7 @@ FALLBACK_TEMPLATE = {
 # EasyOCR only: empty means do not restrict the charset (CJK / Hangul / Cyrillic).
 _NAME_ALLOW = ""
 _NAME_PUNCT = set("'’`-·・ー.☆★&:")
-# Digits EasyOCR confuses with letters are mapped in clean_number.
+# Charset EasyOCR (treino). A produção não remapeia o número depois do OCR.
 _NUMBER_ALLOW = "0123456789/OoQqDdIiLl|ZzSsGgBb"
 _NUMBER_TRANSLATE = str.maketrans(
     {
@@ -189,31 +189,9 @@ def _parse_ocr_items(items) -> tuple[str, float]:
     return joined, mean
 
 
-def _format_number(left: str, right: str) -> str:
-    return f"{int(left):03d}/{int(right)}"
-
-
-def _split_number_digits(digits: str) -> tuple[str, str] | None:
-    """Remonta NNN/NNN quando a barra some ou é lida como 1."""
-    if len(digits) == 7 and digits[3] == "1":
-        return digits[:3], digits[4:]
-    if len(digits) == 6:
-        return digits[:3], digits[3:]
-    if len(digits) == 5:
-        return digits[:2], digits[2:]
-    return None
-
-
 def clean_number(text: str) -> str:
-    raw = (text or "").translate(_NUMBER_TRANSLATE)
-    raw = raw.replace(" ", "").replace("\\", "/").replace("⁄", "/").replace("-", "/")
-    match = re.search(r"(\d{1,3})/(\d{2,3})", raw)
-    if match:
-        return _format_number(match.group(1), match.group(2))
-    parts = _split_number_digits(re.sub(r"\D", "", raw))
-    if parts:
-        return _format_number(*parts)
-    return ""
+    """Devolve o texto do OCR. Sem remapear letras, inventar barra nem pad 000/000."""
+    return (text or "").strip()
 
 
 def _keep_name_char(ch: str) -> bool:

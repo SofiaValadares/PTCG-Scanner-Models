@@ -9,9 +9,9 @@ ROI number,% detector box,0.9574223245109321
 ROI number,% template fallback,0.04257767548906789
 ROI collection,% detector box,0.5356731875719217
 ROI collection,% template fallback,0.4643268124280783
-OCR name,accuracy,0.6513233601841196
-OCR name,mean CER,0.3589306571685177
-OCR number,accuracy,0.8072497123130035
-OCR number,mean CER,0.19018953093320187
+OCR name,accuracy,0.9499424626006905
+OCR name,mean CER,0.059738513485579986
+OCR number,accuracy,0.797180667433832
+OCR number,mean CER,0.16844964107622334
 OCR collection,accuracy vs set name,0.04833141542002301
-End-to-end,catalog hit,0.9663406214039125
+End-to-end,catalog hit,0.9847525891829689
