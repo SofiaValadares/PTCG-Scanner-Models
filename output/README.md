@@ -17,7 +17,7 @@ A eleição dos pesos (obb-v6 / ocr-roi-v3) está nos READMEs de `train/`.
 
 ## Resultado
 
-**Catalog hit 3423/3476 (98.5%)**. Um acerto é nome (PT ou EN) **ou** número batendo com a linha do ground truth.
+**Catalog hit 0/2677 (0.0%)**. Um acerto é nome (PT ou EN) **ou** número batendo com a linha do ground truth.
 
 ## Métricas por etapa
 

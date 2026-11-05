@@ -87,7 +87,7 @@ sys.path.insert(0, str(REPO / "src" / "ocr"))
 from crop_from_obb import imgsz_for_weights
 from rectify import crop_result
 import read_card
-from read_card import catalog_language_codes, create_reader, fold_text, read_card, script_family
+from read_card import catalog_language_codes, create_reader, fold_text, parse_printed_number, read_card, script_family
 
 DATA = REPO / "data"
 EVAL_SOURCE = ARGS.source
@@ -145,13 +145,7 @@ def fold(text: str) -> str:
 
 
 def parse_number(text: str) -> tuple[int | None, int | None]:
-    match = re.search(r"(\d+)\s*[/-]\s*(\d+)", text or "")
-    if match:
-        return int(match.group(1)), int(match.group(2))
-    digits = re.sub(r"\D", "", text or "")
-    if len(digits) >= 3:
-        return int(digits[:3]), int(digits[3:]) if len(digits) > 3 else None
-    return None, None
+    return parse_printed_number(text)
 
 
 def format_number(collector: int | None, total: int | None) -> str:

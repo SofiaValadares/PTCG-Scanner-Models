@@ -194,6 +194,63 @@ def clean_number(text: str) -> str:
     return (text or "").strip()
 
 
+def _slash_confused_number(digits: str) -> tuple[int, int] | None:
+    """OCR costuma ler '/' como 7 (às vezes 1): 1167165 → 116/165."""
+    n = len(digits)
+    if not (4 <= n <= 8) or not digits.isdigit():
+        return None
+    scored: list[tuple[int, int, int]] = []
+    for left_len in range(1, 5):
+        right = digits[left_len + 1 :]
+        if not (2 <= len(right) <= 3):
+            continue
+        sep = digits[left_len]
+        if sep not in "71":
+            continue
+        collector = int(digits[:left_len])
+        total = int(right)
+        if collector <= 0 or total <= 0:
+            continue
+        score = 4 if sep == "7" else 1
+        if 40 <= total <= 400:
+            score += 3
+        elif 10 <= total <= 39:
+            score += 1
+        if collector <= total + 80:
+            score += 2
+        if 1 <= collector <= 400:
+            score += 1
+        if len(right) == 3:
+            score += 1
+        scored.append((score, collector, total))
+    if not scored:
+        return None
+    scored.sort(reverse=True)
+    return scored[0][1], scored[0][2]
+
+
+def parse_printed_number(text: str) -> tuple[int | None, int | None]:
+    """Lê o número da carta com folga: 116, 116/165, 116-165 ou 1167165."""
+    text = text or ""
+    match = re.search(r"(\d+)\s*[/-]\s*(\d+)", text)
+    if match:
+        return int(match.group(1)), int(match.group(2))
+    nums = re.findall(r"\d+", text)
+    if len(nums) == 2 and 1 <= len(nums[0]) <= 4 and 2 <= len(nums[1]) <= 3:
+        return int(nums[0]), int(nums[1])
+    if len(nums) == 1:
+        raw = nums[0]
+        if 1 <= len(raw) <= 4:
+            return int(raw), None
+        recovered = _slash_confused_number(raw)
+        if recovered:
+            return recovered
+    recovered = _slash_confused_number(re.sub(r"\D", "", text))
+    if recovered:
+        return recovered
+    return None, None
+
+
 def _keep_name_char(ch: str) -> bool:
     return ch.isalnum() or ch.isspace() or ch in _NAME_PUNCT
 
