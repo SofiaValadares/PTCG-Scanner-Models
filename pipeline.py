@@ -106,9 +106,8 @@ else:
     SEC_PER_PAGE = 20
 INPUT_DIR.mkdir(parents=True, exist_ok=True)
 CATALOG_LANG = ARGS.catalog_lang
-CATALOG_DIR = DATA / "catalog" / CATALOG_LANG
+CATALOG_DIR = DATA / "catalog"
 CATALOG_CSV = CATALOG_DIR / "cards.csv"
-SETS_CSV = CATALOG_DIR / "sets.csv"
 OUT_DIR = REPO / "output"
 OUT_PDF_DIR = OUT_DIR / "pdfs"
 OUT_TABLES_DIR = OUT_DIR / "tables"
@@ -159,12 +158,71 @@ def format_number(collector: int | None, total: int | None) -> str:
 print("Repo     :", REPO)
 print("Eval     :", EVAL_SOURCE, "| MAX_IMAGES=", MAX_IMAGES)
 print("Input    :", INPUT_DIR, "exists=", INPUT_DIR.is_dir())
-print("Catalog  :", CATALOG_LANG, CATALOG_CSV, "exists=", CATALOG_CSV.is_file())
-print("Sets     :", SETS_CSV, "exists=", SETS_CSV.is_file())
+print("Catalog  :", CATALOG_CSV, "exists=", CATALOG_CSV.is_file(), "| preferência", CATALOG_LANG)
 print("Output   :", OUT_DIR)
 print("OBB      :", OBB_WEIGHTS, "exists=", OBB_WEIGHTS.is_file())
 print("OCR ROI  :", OCR_WEIGHTS, "exists=", OCR_WEIGHTS.is_file())
 print("Device   :", DEVICE)
+
+
+def _catalog_text(value) -> str:
+    text = str(value or "").strip()
+    return "" if text.lower() == "nan" else text
+
+
+def load_flat_catalog(csv_path: Path) -> pd.DataFrame:
+    """Uma tabela com nome e coleção em inglês e português."""
+    raw = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+    rows = []
+    seen: set[tuple[str, str, str]] = set()
+    for row in raw.itertuples(index=False):
+        number = _catalog_text(row.number)
+        set_id = _catalog_text(row.set_id)
+        if not number or not set_id:
+            continue
+        rarity = _catalog_text(getattr(row, "rarity", ""))
+        collector, total = parse_number(number)
+        name_en = _catalog_text(row.name_en)
+        name_pt = _catalog_text(row.name_pt)
+        set_name_en = _catalog_text(getattr(row, "set_name_en", "")) or set_id
+        set_name_pt = _catalog_text(getattr(row, "set_name_pt", "")) or set_id
+        names = (
+            ("en", name_en, set_name_en),
+            ("pt", name_pt, set_name_pt),
+        )
+        for lang, name, set_name in names:
+            name = _catalog_text(name)
+            if not name:
+                continue
+            folded = fold(name)
+            key = (folded, number, set_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(
+                {
+                    "name": name,
+                    "name_en": name_en,
+                    "name_pt": name_pt,
+                    "number": number,
+                    "rarity": rarity,
+                    "set_id": set_id,
+                    "set_code": set_id,
+                    "set_name": set_name,
+                    "set_name_en": set_name_en,
+                    "set_name_pt": set_name_pt,
+                    "set_file": set_id,
+                    "collector": collector,
+                    "total": total,
+                    "name_fold": folded,
+                    "lang": lang,
+                }
+            )
+    catalog = pd.DataFrame(rows)
+    if catalog.empty:
+        raise ValueError(f"Catalog is empty: {csv_path}")
+    catalog["script"] = catalog["name_fold"].map(script_family)
+    return catalog.reset_index(drop=True)
 
 
 def load_catalog(csv_path: Path, sets_path: Path) -> pd.DataFrame:
@@ -202,6 +260,13 @@ def load_catalog(csv_path: Path, sets_path: Path) -> pd.DataFrame:
 
 
 def load_catalogs(catalog_root: Path, preferred: str = "en") -> pd.DataFrame:
+    flat = Path(catalog_root) / "cards.csv"
+    if flat.is_file() and "name_en" in pd.read_csv(flat, nrows=0).columns:
+        frame = load_flat_catalog(flat)
+        if preferred in set(frame["lang"]):
+            first = frame["lang"] == preferred
+            frame = pd.concat([frame.loc[first], frame.loc[~first]], ignore_index=True)
+        return frame
     langs = catalog_language_codes(catalog_root)
     if preferred in langs:
         langs = [preferred] + [lang for lang in langs if lang != preferred]
@@ -231,6 +296,14 @@ _ILLEGIBLE_NAME = re.compile(r"^[-_.\s]*(?:v|ex|gx|vstar|vmax)?[-_.\s]*$", re.I)
 
 def parse_identify_label(text: str) -> dict:
     raw = (text or "").strip()
+    labeled = re.match(r"^([A-Za-z0-9]+)-([A-Za-z]*)(\d+)-(\d+)-(.+)$", raw)
+    if labeled:
+        prefix, digits, total, name = labeled.group(2), labeled.group(3), labeled.group(4), labeled.group(5)
+        return {
+            "name": name.replace("-", " ").strip(),
+            "number": f"{prefix.upper()}{int(digits)}/{int(total)}",
+            "collection": labeled.group(1),
+        }
     parts = raw.split(None, 2)
     collection = parts[0] if parts else ""
     number_tok = parts[1] if len(parts) > 1 else ""
@@ -472,27 +545,70 @@ def name_score(ocr_name: str, cat_fold: str, cat_name: str) -> float:
     return SequenceMatcher(None, query, cat_fold).ratio()
 
 
-def match_catalog(
+def _collection_key(text: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]", "", text or "").upper()
+
+
+def collection_trigrams_match(ocr_collection: str, set_id: str) -> bool:
+    """Três letras seguidas iguais. SFAPT conta como SFA; o PT/EN do símbolo é opcional."""
+    left = _collection_key(ocr_collection)
+    right = _collection_key(set_id)
+    if len(left) < 3 or len(right) < 3:
+        return bool(left) and left == right
+    grams = {left[i : i + 3] for i in range(len(left) - 2)}
+    return any(right[i : i + 3] in grams for i in range(len(right) - 2))
+
+
+# Eleito pelas fotos reais em train/catalog: 2291/2677.
+CURRENT_WEIGHTS = {
+    "name_w": 1000.0,
+    "name_exact": 30.0,
+    "number_w": 120.0,
+    "number_near": 30.0,
+    "total_w": 130.0,
+    "set_w": 170.0,
+}
+_EMPTY_MATCH = ["name", "number", "set_id", "set_name", "rarity", "lang", "score"]
+
+
+def _collector_distance(collectors: pd.Series, ocr_number: str) -> np.ndarray:
+    """Distância até o colecionador lido. Sem número comparável, a ordem original fica."""
+    read, _total = parse_number(ocr_number)
+    values = pd.to_numeric(collectors, errors="coerce").to_numpy(dtype=np.float64)
+    if read is None:
+        return np.zeros(len(values), dtype=np.float64)
+    distance = np.abs(values - float(read))
+    return np.where(np.isfinite(values), distance, np.float64(1e9))
+
+
+def apply_decision_weights(frame: pd.DataFrame, weights: dict | None = None) -> np.ndarray:
+    """Soma os pesos. O argmax desta conta é a carta escolhida."""
+    chosen = CURRENT_WEIGHTS.copy()
+    if weights:
+        chosen.update({key: float(value) for key, value in weights.items() if key in chosen})
+    return (
+        frame["name_score"].to_numpy(dtype=np.float32) * chosen["name_w"]
+        + frame["name_exact"].to_numpy(dtype=np.float32) * chosen["name_exact"]
+        + frame["number_exact"].to_numpy(dtype=np.float32) * chosen["number_w"]
+        + frame["number_near"].to_numpy(dtype=np.float32) * chosen["number_near"]
+        + frame["total_exact"].to_numpy(dtype=np.float32) * chosen["total_w"]
+        + frame["set_hit"].to_numpy(dtype=np.float32) * chosen["set_w"]
+    )
+
+
+def match_features(
     ocr_name: str,
     ocr_number: str,
     ocr_collection: str,
     catalog: pd.DataFrame,
     set_id: str = "",
-    top_n: int = 3,
 ) -> pd.DataFrame:
-    """Só tenta acertar a carta se o OCR leu o número. Sem número, não chuta."""
-    name_w, name_exact = 1000.0, 40.0
-    number_w, number_near, total_w, set_w = 50.0, 15.0, 25.0, 10.0
+    """Candidatos com as parcelas da decisão, ainda sem peso."""
     collector, total = parse_number(ocr_number)
     if collector is None:
-        return pd.DataFrame(columns=["name", "number", "set_id", "set_name", "rarity", "lang", "score"])
+        return pd.DataFrame(columns=_EMPTY_MATCH)
     query = fold(ocr_name)
-    collection_ids = set()
-    if set_id:
-        collection_ids.add(set_id)
-    ocr_set = (ocr_collection or "").strip()
-    if ocr_set and ocr_set in set(catalog["set_id"]):
-        collection_ids.add(ocr_set)
+    explicit_set = {_collection_key(set_id)} if set_id else set()
 
     parts = []
     q_fam = script_family(query) if query else "none"
@@ -509,34 +625,61 @@ def match_catalog(
         near = near_cat["collector"].notna() & (near_cat["collector"] - collector).abs().le(2)
         parts.append(near_cat.loc[near])
     if not parts:
-        return pd.DataFrame(columns=["name", "number", "set_id", "set_name", "rarity", "lang", "score"])
+        return pd.DataFrame(columns=_EMPTY_MATCH)
     pool = pd.concat(parts).drop_duplicates()
     if pool.empty:
-        return pd.DataFrame(columns=["name", "number", "set_id", "set_name", "rarity", "lang", "score"])
+        return pd.DataFrame(columns=_EMPTY_MATCH)
 
     scored = pool.copy()
-    scores = np.zeros(len(scored), dtype=np.float32)
-    scores += np.asarray(
-        [name_w * name_score(ocr_name, folded, cat_name) for folded, cat_name in zip(scored["name_fold"], scored["name"])],
+    scored["name_score"] = np.asarray(
+        [name_score(ocr_name, folded, cat_name) for folded, cat_name in zip(scored["name_fold"], scored["name"])],
         dtype=np.float32,
     )
-    if query:
-        scores += np.where(scored["name_fold"].to_numpy() == query, name_exact, 0.0)
-    if collector is not None:
-        same = scored["collector"].to_numpy() == collector
-        scores += np.where(same, number_w, 0.0)
-        near = scored["collector"].notna().to_numpy() & (np.abs(scored["collector"].to_numpy() - collector) <= 2)
-        scores += np.where(near & ~same, number_near, 0.0)
-        if total is not None:
-            scores += np.where(scored["total"].to_numpy() == total, total_w, 0.0)
-    if collection_ids:
-        scores += np.where(scored["set_id"].isin(collection_ids).to_numpy(), set_w, 0.0)
-    scored["score"] = scores
-    out = scored.sort_values("score", ascending=False).head(top_n)
-    return out.reset_index(drop=True)
+    scored["name_exact"] = (scored["name_fold"].to_numpy() == query).astype(np.float32) if query else np.float32(0.0)
+    same = scored["collector"].to_numpy() == collector
+    near = scored["collector"].notna().to_numpy() & (np.abs(scored["collector"].to_numpy() - collector) <= 2)
+    scored["number_exact"] = same.astype(np.float32)
+    scored["number_near"] = (near & ~same).astype(np.float32)
+    scored["total_exact"] = (
+        (scored["total"].to_numpy() == total).astype(np.float32)
+        if total is not None
+        else np.float32(0.0)
+    )
+    scored["set_hit"] = np.asarray(
+        [
+            _collection_key(code) in explicit_set or collection_trigrams_match(ocr_collection, code)
+            for code in scored["set_id"]
+        ],
+        dtype=np.float32,
+    )
+    return scored.reset_index(drop=True)
 
 
-demo = match_catalog("Alakazam", "1/102", "", catalog, set_id="BS", top_n=3)
+def match_catalog(
+    ocr_name: str,
+    ocr_number: str,
+    ocr_collection: str,
+    catalog: pd.DataFrame,
+    set_id: str = "",
+    top_n: int = 3,
+    weights: dict | None = None,
+) -> pd.DataFrame:
+    """Só tenta acertar a carta se o OCR leu o número. Sem número, não chuta.
+
+    Ordem pedida: número + coleção + nome > número + coleção > número + nome.
+    Nota igual fica com o colecionador mais perto do número lido.
+    """
+    scored = match_features(ocr_name, ocr_number, ocr_collection, catalog, set_id=set_id)
+    if scored.empty or "name_score" not in scored.columns:
+        return pd.DataFrame(columns=_EMPTY_MATCH)
+    scored = scored.copy()
+    scored["score"] = apply_decision_weights(scored, weights)
+    scored["_distance"] = _collector_distance(scored["collector"], ocr_number)
+    ranked = scored.sort_values(["score", "_distance"], ascending=[False, True], kind="mergesort")
+    return ranked.drop(columns="_distance").head(top_n).reset_index(drop=True)
+
+
+demo = match_catalog("Alakazam", "1/130", "", catalog, set_id="B2", top_n=3)
 display(demo[["name", "number", "set_id", "set_name", "rarity", "score"]])
 
 
@@ -911,6 +1054,13 @@ def annotate_ocr_bgr(bgr: np.ndarray, regions: dict, texts: dict) -> np.ndarray:
     return vis
 
 
+def _catalog_cell(row, key: str) -> str:
+    if row is None or key not in row.index:
+        return ""
+    text = str(row[key] or "").strip()
+    return "" if text.lower() == "nan" else text
+
+
 def stage_dir(pdf_path: Path) -> Path:
     dest = OUT_PDF_DIR / pdf_path.stem
     dest.mkdir(parents=True, exist_ok=True)
@@ -970,10 +1120,15 @@ def extract_page(bgr: np.ndarray, image_name: str, set_id: str, page_i: int) -> 
                 "ocr_number": read.number,
                 "ocr_collection": read.collection,
                 "match_name": "" if best is None else best["name"],
+                "match_name_en": _catalog_cell(best, "name_en"),
+                "match_name_pt": _catalog_cell(best, "name_pt"),
                 "match_number": "" if best is None else best["number"],
                 "match_set": "" if best is None else best["set_id"],
                 "match_file": "" if best is None else best["set_name"],
+                "match_set_name_en": _catalog_cell(best, "set_name_en"),
+                "match_set_name_pt": _catalog_cell(best, "set_name_pt"),
                 "match_rarity": "" if best is None else best["rarity"],
+                "match_lang": _catalog_cell(best, "lang"),
                 "match_score": 0.0 if best is None else float(best["score"]),
                 "crop_bgr": orig_bgr,
                 "crop_color": orig_color,
@@ -1111,6 +1266,15 @@ print("CSV:", extract_path)
 display(extract_df)
 
 
+def number_key(text: str) -> str:
+    """Número impresso, com o prefixo de promo (SV82, RC8, SM206)."""
+    raw = re.sub(r"\s+", "", str(text or "")).upper()
+    match = re.search(r"([A-Z]*)0*(\d+)[/\-]0*(\d+)", raw)
+    if not match:
+        return ""
+    return f"{match.group(1)}{int(match.group(2))}/{int(match.group(3))}"
+
+
 def numbers_equal(a: str, b: str) -> bool:
     ca, ta = parse_number(a)
     cb, tb = parse_number(b)
@@ -1128,26 +1292,17 @@ def sets_equal(a: str, b: str) -> bool:
 
 
 def pair_ok(pred: dict, gt: pd.Series) -> bool:
-    gt_name = str(gt.get("name", "") or "")
-    gt_number = str(gt.get("number", "") or "")
-    gt_set = str(gt.get("collection", "") or "")
-    match_name = str(pred.get("match_name", "") or "")
-    match_number = str(pred.get("match_number", "") or "")
-    match_set = str(pred.get("match_set", "") or "")
-    ocr_name = str(pred.get("ocr_name", "") or "")
-    ocr_number = str(pred.get("ocr_number", "") or "")
-    ocr_collection = str(pred.get("ocr_collection", "") or "")
-    name_ok = names_equivalent(gt_name, match_name) or names_equivalent(gt_name, ocr_name)
-    number_ok = numbers_equal(match_number, gt_number) or numbers_equal(ocr_number, gt_number)
-    set_ok = sets_equal(gt_set, match_set) or sets_equal(gt_set, ocr_collection)
-    if name_ok or number_ok:
-        return True
-    if set_ok and (
-        name_score(match_name, fold(gt_name), gt_name) >= 0.55
-        or name_score(ocr_name, fold(gt_name), gt_name) >= 0.55
-    ):
-        return True
-    return False
+    """Porcentagem de acerto: número e coleção da linha catalogada.
+
+    O nome muda entre português e inglês e não entra nessa conta.
+    A escolha da carta no catálogo continua sendo o ranking atual.
+    """
+    left = number_key(str(pred.get("match_number", "") or ""))
+    right = number_key(str(gt.get("number", "") or ""))
+    return bool(left) and left == right and sets_equal(
+        str(gt.get("collection", "") or ""),
+        str(pred.get("match_set", "") or ""),
+    )
 
 
 
@@ -1203,8 +1358,13 @@ def stage_record(pred: dict | None, gt) -> dict:
         "ocr_number": ocr_number,
         "ocr_collection": ocr_collection,
         "match_name": str(pred.get("match_name", "") or ""),
+        "match_name_en": str(pred.get("match_name_en", "") or ""),
+        "match_name_pt": str(pred.get("match_name_pt", "") or ""),
         "match_number": str(pred.get("match_number", "") or ""),
         "match_set": str(pred.get("match_set", "") or ""),
+        "match_set_name_en": str(pred.get("match_set_name_en", "") or ""),
+        "match_set_name_pt": str(pred.get("match_set_name_pt", "") or ""),
+        "match_rarity": str(pred.get("match_rarity", "") or ""),
         "match_score": float(pred.get("match_score") or 0.0),
         "detected": bool(pred.get("uid")),
         "ocr_name_ok": bool(gt_name) and names_equivalent(gt_name, ocr_name),
@@ -1436,7 +1596,8 @@ def row_has_gt(row) -> bool:
         return False
     name = str(row.get("gt_name", "") or "").strip()
     number = str(row.get("gt_number", "") or "").strip()
-    return bool(name or number)
+    collection = str(row.get("gt_set", "") or "").strip()
+    return bool(name or number or collection)
 
 
 def _txt(val) -> str:
@@ -1686,9 +1847,16 @@ if SAVE_STAGES:
 hit_pdf, miss_pdf = save_guess_pdfs(extracted, eval_df)
 
 def _has_gt(frame: pd.DataFrame) -> pd.Series:
-    name = frame["gt_name"].astype(str).str.strip() if "gt_name" in frame.columns else ""
-    number = frame["gt_number"].astype(str).str.strip() if "gt_number" in frame.columns else ""
-    return (name.str.len() > 0) | (number.str.len() > 0)
+    filled = []
+    for column in ("gt_name", "gt_number", "gt_set"):
+        if column in frame.columns:
+            filled.append(frame[column].astype(str).str.strip().str.len() > 0)
+    if not filled:
+        return pd.Series(False, index=frame.index)
+    mask = filled[0]
+    for part in filled[1:]:
+        mask = mask | part
+    return mask
 
 paired = eval_df[_has_gt(eval_df)].copy() if len(eval_df) else eval_df
 n_ok = int(paired["ok"].sum()) if len(paired) and "ok" in paired.columns else 0
@@ -1726,9 +1894,7 @@ show_cols = [c for c in (
 display(eval_df[show_cols].head(20) if show_cols else eval_df.head(20))
 
 
-gt_mask = (eval_df["gt_name"].astype(str).str.strip().str.len() > 0)
-if "gt_number" in eval_df.columns:
-    gt_mask = gt_mask | (eval_df["gt_number"].astype(str).str.strip().str.len() > 0)
+gt_mask = _has_gt(eval_df)
 gt_rows = eval_df[gt_mask].copy()
 if "ok" in gt_rows.columns:
     gt_rows["id_ok"] = gt_rows["ok"].astype(bool)
@@ -2038,7 +2204,8 @@ def write_pipeline_readme() -> Path:
     if n_gt:
         lines.append(
             f"**Catalog hit {n_ok}/{n_gt} ({100 * n_ok / n_gt:.1f}%)**. "
-            "Um acerto é nome (PT ou EN) **ou** número batendo com a linha do ground truth."
+            "Um acerto é o número e a coleção da carta catalogada iguais aos da anotação. "
+            "O nome em português ou inglês não entra nessa conta."
         )
     else:
         lines.append("_Sem `tables/pipeline_eval.csv`. Rode `python pipeline.py`._")

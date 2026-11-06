@@ -7,6 +7,7 @@ train/
 ├── detector/     python -m train detector     → train/detector/README.md
 ├── roi/          python -m train roi          → train/roi/README.md
 ├── ocr/          python -m train ocr          → train/ocr/README.md
+├── catalog/      python -m train catalog      → train/catalog/README.md
 └── common/       ranking, plots, progress bar
 ```
 
@@ -15,6 +16,7 @@ python -m train all                 # detector → roi → ocr
 python -m train detector
 python -m train roi
 python -m train ocr
+python -m train catalog
 python -m train detector --report-only --pdf
 ```
 

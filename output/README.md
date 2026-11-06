@@ -17,7 +17,7 @@ A eleição dos pesos (obb-v6 / ocr-roi-v3) está nos READMEs de `train/`.
 
 ## Resultado
 
-**Catalog hit 0/2677 (0.0%)**. Um acerto é nome (PT ou EN) **ou** número batendo com a linha do ground truth.
+**Catalog hit 2309/2677 (86.3%)**. Um acerto é o número e a coleção da carta catalogada iguais aos da anotação. O nome em português ou inglês não entra nessa conta.
 
 ## Métricas por etapa
 
@@ -34,48 +34,48 @@ A eleição dos pesos (obb-v6 / ocr-roi-v3) está nos READMEs de `train/`.
 
 | Métrica | Valor |
 | --- | --- |
-| % detector box | 96.9% |
-| % template fallback | 3.1% |
+| % detector box | 98.8% |
+| % template fallback | 1.1% |
 
 ### ROI number
 
 | Métrica | Valor |
 | --- | --- |
-| % detector box | 95.7% |
-| % template fallback | 4.3% |
+| % detector box | 95.9% |
+| % template fallback | 4.0% |
 
 ### ROI collection
 
 | Métrica | Valor |
 | --- | --- |
-| % detector box | 53.6% |
-| % template fallback | 46.4% |
+| % detector box | 36.3% |
+| % template fallback | 63.7% |
 
 ### OCR name
 
 | Métrica | Valor |
 | --- | --- |
-| accuracy | 95.0% |
-| mean CER | 0.060 |
+| accuracy | 88.9% |
+| mean CER | 0.196 |
 
 ### OCR number
 
 | Métrica | Valor |
 | --- | --- |
-| accuracy | 79.7% |
-| mean CER | 0.168 |
+| accuracy | 77.1% |
+| mean CER | 0.224 |
 
 ### OCR collection
 
 | Métrica | Valor |
 | --- | --- |
-| accuracy vs set name | 4.8% |
+| accuracy vs set name | 6.9% |
 
 ### End-to-end
 
 | Métrica | Valor |
 | --- | --- |
-| catalog hit | 98.5% |
+| catalog hit | 86.3% |
 
 ## Figuras
 

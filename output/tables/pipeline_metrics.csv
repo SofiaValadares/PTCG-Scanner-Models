@@ -1,17 +1,17 @@
 stage,metric,value
-Cards,detected / GT (recall),1.0
+Cards,detected / GT (recall),0.9996264475158759
 Cards,precision (IoU match),1.0
-Cards,F1 detection,1.0
+Cards,F1 detection,0.9998131888660563
 Cards,extra detections (no GT),0.0
-ROI name,% detector box,0.9686421173762946
-ROI name,% template fallback,0.03135788262370541
-ROI number,% detector box,0.9574223245109321
-ROI number,% template fallback,0.04257767548906789
-ROI collection,% detector box,0.5356731875719217
-ROI collection,% template fallback,0.4643268124280783
-OCR name,accuracy,0.9499424626006905
-OCR name,mean CER,0.059738513485579986
-OCR number,accuracy,0.797180667433832
-OCR number,mean CER,0.16844964107622334
-OCR collection,accuracy vs set name,0.04833141542002301
-End-to-end,catalog hit,0.9847525891829689
+ROI name,% detector box,0.9884198729921554
+ROI name,% template fallback,0.011206574523720583
+ROI number,% detector box,0.9592827792304819
+ROI number,% template fallback,0.040343668285394096
+ROI collection,% detector box,0.36309301456854687
+ROI collection,% template fallback,0.6365334329473291
+OCR name,accuracy,0.8890549122151662
+OCR name,mean CER,0.19616621473576443
+OCR number,accuracy,0.7710123272319761
+OCR number,mean CER,0.2241160740226859
+OCR collection,accuracy vs set name,0.0691072095629436
+End-to-end,catalog hit,0.8625326858423609

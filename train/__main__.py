@@ -16,11 +16,13 @@ Treinos do PTCG Scanner.
   python -m train detector   [--report-only] [--pdf] [--no-plots]
   python -m train roi        [--report-only] [--pdf] [--no-plots]
   python -m train ocr        [--report-only] [--pdf] [--max-boxes N] [--treatments]
+  python -m train catalog    [--rebuild]
 
 `all` roda detector -> roi -> ocr, nesta ordem (cada um pode levar horas).
 `python -m train ocr` grava motores e tratamentos no mesmo README (`train/ocr`).
+`python -m train catalog` compara pesos da decisão e grava `train/catalog/README.md`.
 `--treatments` refaz só o sweep de pré-processamento.
-Cada comando grava o relatório na pasta do treino (train/detector, train/roi, train/ocr).
+Cada comando grava o relatório na pasta do treino (train/detector, train/roi, train/ocr, train/catalog).
 --pdf gera report.pdf no mesmo diretório (gitignored; use no TCC).
 A barra de progresso (época, mAP, ETA, VRAM) atualiza na mesma linha do terminal.
 """
@@ -41,6 +43,10 @@ def _job_main(cmd: str):
         from train.ocr import main as run
 
         return "ocr", run
+    if cmd in {"catalog", "decision"}:
+        from train.catalog import main as run
+
+        return "catalog", run
     return None, None
 
 
