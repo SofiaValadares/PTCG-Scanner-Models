@@ -8,7 +8,7 @@ O peso eleito é o de `pipeline.py` e o da API do site (`ptcg_api/catalog.py`).
 
 | Item | Valor |
 | --- | --- |
-| Data/hora | 2026-11-06 15:51:10 |
+| Data/hora | 2026-11-08 18:36:40 |
 | SO | Windows 11 |
 | Python | 3.14.7 |
 | PyTorch | 2.11.0+cu128 |
@@ -19,9 +19,9 @@ O peso eleito é o de `pipeline.py` e o da API do site (`ptcg_api/catalog.py`).
 | VRAM | 8.0 GB |
 | Dispositivo de treino | 0 |
 | cuDNN | True |
-| cwd | C:\Users\Pichau\Documents\Repositorios\TCGTradeSegmentacao |
-| runs_dir | C:\Users\Pichau\Documents\Repositorios\TCGTradeSegmentacao\runs\catalog |
-| weights_dir | C:\Users\Pichau\Documents\Repositorios\TCGTradeSegmentacao\pretrained |
+| cwd | C:\Users\Pichau\OneDrive\Documentos\Repositorios\TCGTradeSegmentacao |
+| runs_dir | C:\Users\Pichau\OneDrive\Documentos\Repositorios\TCGTradeSegmentacao\runs\catalog |
+| weights_dir | C:\Users\Pichau\OneDrive\Documentos\Repositorios\TCGTradeSegmentacao\pretrained |
 
 ## Protocolo
 
@@ -32,10 +32,10 @@ O peso eleito é o de `pipeline.py` e o da API do site (`ptcg_api/catalog.py`).
 - O arquivo não guarda `sample_id` nem o nome da foto.
 - A linha sintética é uma carta do catálogo que não estava na leitura. O erro copia o padrão real: nome quase igual, número exato na maior parte, e o resto sem número ou com o total ou o colecionador deslocado.
 - `ocr_collection` sintético fica vazio antes de SVI. De Scarlet & Violet em diante o código é texto, e a leitura repete o OCR: vazio, o código, o código com PT ou EN, ou uma letra trocada.
-- A grade cruza todos os eixos, do zero até um peso alto: name_w (0, 40, 100, 400, 1000); name_exact (0, 10, 40); number_w (0, 40, 110, 400); number_near (0, 20, 80); total_w (0, 30, 120); set_w (0, 40, 150, 400).
-- Depois da grade, cada peso do eleito anda de 10 em 10, de 20 abaixo a 20 acima.
-- `atual` é o peso da pipeline e do site. `anterior` é o peso que estava na pipeline antes desta eleição. `nome_alto` é a conta antiga, com nome até 1000.
+- A grade cruza todos os eixos, do zero até um peso alto: name_w (0, 100, 250, 400, 700, 1000); name_exact (0, 10, 40, 100); number_w (0, 40, 110, 250, 500); number_near (0, 20, 40, 80); total_w (0, 30, 120, 250); set_w (0, 40, 150, 400, 800).
+- `atual` é o peso da pipeline e do site. `nome_alto` é a conta antiga, com nome até 1000.
 - O veredito elege o maior acerto nas leituras reais. Empate prefere o maior peso de número e, depois, o de coleção. As sintéticas entram no relatório ao lado, e não decidem o peso.
+- Depois da grade, cada peso do eleito anda de 10 em 10, de -20 a +20.
 
 ## O arquivo
 
@@ -52,15 +52,13 @@ A última linha é o teto desta conta. A soma linear não passa disso: se a cart
 
 ## Veredito
 
-O peso eleito pelas fotos reais é name_w 1000, name_exact 30, number_w 120, number_near 30, total_w 130, set_w 170. Ele acerta 2291/2677 (85.58%) das leituras reais e 5085/6058 (83.94%) das sintéticas. Nas duas juntas, 7376/8735 (84.44%).
+O peso eleito pelas fotos reais é name_w 700, name_exact 30, number_w 110, number_near 20, total_w 120, set_w 170. Ele acerta 2338/2677 (87.34%) das leituras reais e 5115/6058 (84.43%) das sintéticas. Nas duas juntas, 7453/8735 (85.32%).
 
-A variação de 10 em 10 sobe uma carta real (2290 para 2291) e uma sintética (5084 para 5085) em relação ao melhor da grade.
+Nota igual fica com quem tem mais dígitos em comum com o colecionador lido. Se a quantidade empata, fica a menor diferença absoluta. A grade usa esse desempate.
 
-Nota igual fica com o colecionador mais perto do número lido. Nas fotos reais isso acerta mais 13 e erra 5 que a nota sozinha deixava empatadas. A grade acima não conta esse desempate.
+O peso que está na pipeline acerta 2337/2677 (87.30%) das reais e 5099/6058 (84.17%) das sintéticas. A conta antiga, com o nome até 1000, acerta 2312/2677 (86.37%) das reais e 5083/6058 (83.91%) das sintéticas.
 
-A pipeline e o site usam esse peso. O peso anterior acertava 2202/2677 (82.26%) das reais e 4728/6058 (78.05%) das sintéticas. A conta antiga, com o nome até 1000, acerta 2264/2677 (84.57%) das reais e 5056/6058 (83.46%) das sintéticas.
-
-Nas sintéticas o melhor seria name_w 980, name_exact 30, number_w 130, number_near 10, total_w 120, set_w 170, com 5094/6058 (84.09%) nelas e 2284/2677 (85.32%) nas reais. A eleição fica com as fotos, porque as sintéticas repetem um padrão de erro e têm mais cartas de SVI em diante.
+Nas sintéticas o melhor seria name_w 400, name_exact 100, number_w 40, number_near 20, total_w 120, set_w 150, com 5123/6058 (84.57%) nelas e 2322/2677 (86.74%) nas reais. A eleição fica com as fotos, porque as sintéticas repetem um padrão de erro e têm mais cartas de SVI em diante.
 
 ## Gráficos
 
@@ -80,17 +78,16 @@ Pesos de referência. A linha tracejada é o teto: a carta certa está entre as 
 
 | label | reais | sinteticas | todas | name_w | name_exact | number_w | number_near | total_w | set_w |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| melhor | 85.58% | 83.94% | 84.44% | 1000.00 | 30.00 | 120.00 | 30.00 | 130.00 | 170.00 |
-| local | 85.58% | 83.94% | 84.44% | 1000.00 | 30.00 | 120.00 | 30.00 | 140.00 | 170.00 |
-| local | 85.58% | 83.94% | 84.44% | 1000.00 | 40.00 | 120.00 | 30.00 | 130.00 | 170.00 |
-| local | 85.58% | 83.94% | 84.44% | 1000.00 | 40.00 | 120.00 | 30.00 | 140.00 | 170.00 |
-| local | 85.58% | 83.94% | 84.44% | 1000.00 | 40.00 | 120.00 | 40.00 | 130.00 | 170.00 |
-| local | 85.58% | 83.94% | 84.44% | 1000.00 | 40.00 | 120.00 | 40.00 | 140.00 | 170.00 |
-| local | 85.58% | 83.94% | 84.44% | 1000.00 | 50.00 | 120.00 | 30.00 | 130.00 | 170.00 |
-| local | 85.58% | 83.94% | 84.44% | 1000.00 | 50.00 | 120.00 | 30.00 | 140.00 | 170.00 |
-| melhor_sintetica | 85.32% | 84.09% | 84.46% | 980.00 | 30.00 | 130.00 | 10.00 | 120.00 | 170.00 |
-| nome_alto | 84.57% | 83.46% | 83.80% | 1000.00 | 40.00 | 50.00 | 15.00 | 25.00 | 10.00 |
-| atual | 85.58% | 83.94% | 84.44% | 1000.00 | 30.00 | 120.00 | 30.00 | 130.00 | 170.00 |
-| anterior | 82.26% | 78.05% | 79.34% | 100.00 | 10.00 | 110.00 | 20.00 | 30.00 | 150.00 |
+| melhor | 87.34% | 84.43% | 85.32% | 700 | 30 | 110 | 20 | 120 | 170 |
+| local | 87.34% | 84.43% | 85.32% | 700 | 40 | 110 | 20 | 120 | 170 |
+| local | 87.34% | 84.43% | 85.32% | 700 | 50 | 110 | 20 | 120 | 170 |
+| local | 87.34% | 84.43% | 85.32% | 700 | 60 | 110 | 20 | 120 | 170 |
+| local | 87.34% | 84.43% | 85.32% | 710 | 30 | 110 | 20 | 120 | 170 |
+| local | 87.34% | 84.43% | 85.32% | 710 | 40 | 110 | 20 | 120 | 170 |
+| local | 87.34% | 84.43% | 85.32% | 710 | 50 | 110 | 20 | 120 | 170 |
+| local | 87.34% | 84.43% | 85.32% | 710 | 60 | 110 | 20 | 120 | 170 |
+| atual | 87.30% | 84.17% | 85.13% | 1000 | 30 | 120 | 30 | 130 | 170 |
+| melhor_sintetica | 86.74% | 84.57% | 85.23% | 400 | 100 | 40 | 20 | 120 | 150 |
+| nome_alto | 86.37% | 83.91% | 84.66% | 1000 | 40 | 50 | 15 | 25 | 10 |
 
 Tabela completa: [`ranking.csv`](ranking.csv).

@@ -12,7 +12,7 @@ train/
 ```
 
 ```powershell
-python -m train all                 # detector → roi → ocr
+python -m train all                 # detector → roi → ocr → catalog
 python -m train detector
 python -m train roi
 python -m train ocr

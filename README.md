@@ -36,7 +36,7 @@ set PDF or photo
     → compare to identify GT (OBB IoU) or the CSV next to the PDF
 ```
 
-Nothing in the full pipeline **trains** a model. Training is `python -m train all` (or `detector` / `roi` / `ocr` one at a time). The cropper has no trainable weights of its own; it consumes the detector.
+Nothing in the full pipeline **trains** a model. Training is `python -m train all` (or `detector` / `roi` / `ocr` / `catalog` one at a time). The cropper has no trainable weights of its own; it consumes the detector.
 
 Typical settings used in the thesis experiments: card confidence **0.8**, OCR-ROI confidence **0.4**, about **20 seconds per PDF page** on a consumer GPU (detect + crop + OCR).
 
@@ -52,7 +52,8 @@ PTCG Scanner/
 ├── train/
 │   ├── detector/              python -m train detector
 │   ├── roi/                   python -m train roi
-│   └── ocr/                   python -m train ocr
+│   ├── ocr/                   python -m train ocr
+│   └── catalog/               python -m train catalog
 ├── src/                       cropper, roi, ocr (code only)
 ├── data/                      catalog + local datasets
 ├── models/                    export weights: obb-v6.pt, ocr-roi-v3.pt
@@ -65,7 +66,7 @@ PTCG Scanner/
 | Path | You use it for |
 |---|---|
 | [`pipeline.py`](pipeline.py) | Full pipeline on `data/identify/` (or `--source input`) |
-| [`train/`](train/) | `python -m train all` or `detector` / `roi` / `ocr` |
+| [`train/`](train/) | `python -m train all` or `detector` / `roi` / `ocr` / `catalog` |
 | [`src/cropper/`](src/cropper/) | `python -m cropper` |
 | [`src/roi/`](src/roi/) | Strip detector package; pipeline uses **ocr-roi-v3** |
 | [`src/ocr/`](src/ocr/) | `read_card.py` |
@@ -163,14 +164,15 @@ The weight it copies is `models/obb-v6.pt` (YOLOv26). The ROI model for the full
 
 ### 5. Train models
 
-Each command writes a **README in that training folder** (`train/detector/`, `train/roi/`, `train/ocr/`) with tables of every candidate, compressed graphs of every candidate, and a section on the elected model. `--pdf` adds a small `report.pdf` in the same folder (gitignored — attach it to the thesis; do not put it on GitHub). The terminal shows epoch, mAP, ETA and VRAM on one updating line.
+Each command writes a **README in that training folder** (`train/detector/`, `train/roi/`, `train/ocr/`, `train/catalog/`) with tables of every candidate, compressed graphs of every candidate, and a section on the elected model. `--pdf` adds a small `report.pdf` in the same folder (gitignored — attach it to the thesis; do not put it on GitHub). The terminal shows epoch, mAP, ETA and VRAM on one updating line.
 
 ```powershell
 $env:PYTHONPATH="src"   # skip if you already ran pip install -e .
-python -m train all                   # detector → roi → ocr (hours)
+python -m train all                   # detector → roi → ocr → catalog (hours)
 python -m train detector              # obb-v6: YOLOv26 / 12 / 8 / RT-DETR / 11
 python -m train roi                   # ocr-roi-v3: YOLOv26 / 12 / 8 / 11
 python -m train ocr                   # EasyOCR vs RapidOCR vs Tesseract
+python -m train catalog               # catalog decision weights
 python -m train detector --report-only --pdf   # reuse ranking.csv + best.pt
 ```
 
@@ -178,6 +180,7 @@ python -m train detector --report-only --pdf   # reuse ranking.csv + best.pt
 2. `python -m train detector` — **obb-v6** keeps the best (YOLOv26s, val mAP50-95 ≈ 0.994). Pipeline and cropper use that winner. Write-up: [`train/detector/`](train/detector/README.md). Earlier: [`docs/experiments/obb-v3-v5`](docs/experiments/obb-v3-v5/README.md).
 3. `python -m train roi` — **ocr-roi-v3** on the text bands. Pipeline uses **ocr-roi-v3**.
 4. `python -m train ocr` — does **not** train a recognizer. Ranks EasyOCR, RapidOCR/Paddle, and Tesseract on `data/ocr/`.
+5. `python -m train catalog` — does **not** train a network. It ranks the catalog decision weights on the readings already saved by the pipeline. Write-up: [`train/catalog/`](train/catalog/README.md).
 
 Label **printed card edges**, not binder plastic, or the crop (and then OCR) will include the sleeve.
 

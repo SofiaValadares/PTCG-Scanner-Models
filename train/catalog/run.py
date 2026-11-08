@@ -68,9 +68,9 @@ def _import_catalog(repo: Path):
         text = str(folder)
         if text not in sys.path:
             sys.path.insert(0, text)
-    from ptcg_api.catalog import CURRENT_WEIGHTS, load_catalogs, match_features
+    from ptcg_api.catalog import CURRENT_WEIGHTS, load_catalogs, match_features, parse_number
 
-    return CURRENT_WEIGHTS, load_catalogs, match_features
+    return CURRENT_WEIGHTS, load_catalogs, match_features, parse_number
 
 
 def build_decision(repo: Path, eval_path: Path) -> pd.DataFrame:
@@ -155,18 +155,60 @@ def build_candidates(rows: pd.DataFrame, repo: Path, match_features, load_catalo
     return pd.concat(frames, ignore_index=True)
 
 
-def _groups(candidates: pd.DataFrame) -> list[tuple[str, np.ndarray, np.ndarray, np.ndarray]]:
+def _tie_columns(numbers: list[str], ocr_number: str, parse_number) -> tuple[np.ndarray, np.ndarray]:
+    """Dígitos em comum e, no empate, a diferença absoluta do colecionador."""
+    read, _total = parse_number(str(ocr_number or ""))
+    read_digits = "" if read is None else str(int(read))
+    read_counts: dict[str, int] = {}
+    for char in read_digits:
+        read_counts[char] = read_counts.get(char, 0) + 1
+    overlap = np.empty(len(numbers), dtype=np.int16)
+    distance = np.empty(len(numbers), dtype=np.float64)
+    for index, number in enumerate(numbers):
+        collector, _card_total = parse_number(number)
+        if read is None or collector is None:
+            overlap[index] = -1
+            distance[index] = 1e9
+            continue
+        other = str(int(collector))
+        counts: dict[str, int] = {}
+        for char in other:
+            counts[char] = counts.get(char, 0) + 1
+        overlap[index] = sum(min(qty, counts.get(char, 0)) for char, qty in read_counts.items())
+        distance[index] = abs(int(collector) - int(read))
+    return overlap, distance
+
+
+def _groups(candidates: pd.DataFrame, reads: dict[str, str], parse_number) -> list[tuple]:
     grouped = []
     for sample_id, part in candidates.groupby("sample_id", sort=False):
+        sample_id = str(sample_id)
+        numbers = part["number"].astype(str).tolist()
+        overlap, distance = _tie_columns(numbers, reads.get(sample_id, ""), parse_number)
         grouped.append(
             (
-                str(sample_id),
+                sample_id,
                 part[FEATURE_COLUMNS].to_numpy(np.float32),
                 part["number"].astype(str).map(number_key).to_numpy(),
                 part["set_id"].astype(str).map(set_key).to_numpy(),
+                overlap,
+                distance,
             )
         )
     return grouped
+
+
+def _break_ties(scores: np.ndarray, overlap: np.ndarray, distance: np.ndarray) -> np.ndarray:
+    """Maior nota, depois mais dígitos em comum, depois menor diferença absoluta."""
+    best_score = scores.max(axis=0)
+    tied = scores == best_score
+    masked_overlap = np.where(tied, overlap[:, None], np.int16(-1))
+    best_overlap = masked_overlap.max(axis=0)
+    still = tied & (masked_overlap == best_overlap)
+    masked_distance = np.where(still, distance[:, None], np.float64(1e12))
+    best_distance = masked_distance.min(axis=0)
+    chosen = still & (masked_distance == best_distance)
+    return chosen.argmax(axis=0)
 
 
 def score_many(weights: np.ndarray, grouped, truth: dict) -> tuple[np.ndarray, np.ndarray]:
@@ -178,7 +220,7 @@ def score_many(weights: np.ndarray, grouped, truth: dict) -> tuple[np.ndarray, n
     origins = truth["origem"]
     transposed = np.ascontiguousarray(weights.T)
     total = len(grouped)
-    for index, (sample_id, matrix, numbers, sets) in enumerate(grouped, start=1):
+    for index, (sample_id, matrix, numbers, sets, overlap, distance) in enumerate(grouped, start=1):
         origin = origins.get(sample_id)
         if origin is None or len(matrix) == 0:
             continue
@@ -188,7 +230,7 @@ def score_many(weights: np.ndarray, grouped, truth: dict) -> tuple[np.ndarray, n
         chunk = max(1, 32_000_000 // max(len(matrix), 1))
         for start in range(0, count, chunk):
             stop = min(count, start + chunk)
-            chosen = (matrix @ transposed[:, start:stop]).argmax(axis=0)
+            chosen = _break_ties(matrix @ transposed[:, start:stop], overlap, distance)
             ok = (numbers[chosen] == wanted_number) & (sets[chosen] == wanted_set) & (numbers[chosen] != "")
             target[start:stop] += ok
         if index == total or index % 1000 == 0:
@@ -230,7 +272,7 @@ def pool_counts(grouped, truth: dict) -> tuple[int, int]:
     numbers_of = truth["number"]
     sets_of = truth["set"]
     origins = truth["origem"]
-    for sample_id, matrix, numbers, sets in grouped:
+    for sample_id, matrix, numbers, sets, *_rest in grouped:
         origin = origins.get(sample_id)
         if origin is None or len(matrix) == 0:
             continue
@@ -447,7 +489,7 @@ def write_readme(
             "",
             f"O peso eleito pelas fotos reais é {_weights_text(elected)}. Ele acerta {_pct(int(elected['hits_real']), n_real)} das leituras reais e {_pct(int(elected['hits_synthetic']), n_synthetic)} das sintéticas. Nas duas juntas, {_pct(int(elected['hits_real']) + int(elected['hits_synthetic']), n_all)}.",
             "",
-            "Nota igual fica com o colecionador mais perto do número lido. A grade acima não conta esse desempate.",
+            "Nota igual fica com quem tem mais dígitos em comum com o colecionador lido. Se a quantidade empata, fica a menor diferença absoluta. A grade usa esse desempate.",
             "",
             f"O peso que está na pipeline acerta {_pct(int(current['hits_real']), n_real)} das reais e {_pct(int(current['hits_synthetic']), n_synthetic)} das sintéticas. A conta antiga, com o nome até 1000, acerta {_pct(int(old['hits_real']), n_real)} das reais e {_pct(int(old['hits_synthetic']), n_synthetic)} das sintéticas.",
             "",
@@ -504,7 +546,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Falta {eval_path}. Rode python pipeline.py no split identify antes.")
         return 1
 
-    current, load_catalogs, match_features = _import_catalog(repo)
+    current, load_catalogs, match_features, parse_number = _import_catalog(repo)
     if args.rebuild or not decision_path.is_file():
         print("Montando decision.csv ...", flush=True)
         catalog = pd.read_csv(repo / "data" / "catalog" / "cards.csv", dtype=str, keep_default_na=False)
@@ -533,9 +575,10 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(f"Candidatos em cache: {candidate_path}", flush=True)
         candidates = cached if cached is not None else pd.read_csv(candidate_path)
-    grouped = _groups(candidates)
     usable_ids = usable.copy()
     usable_ids["sample_id"] = usable_ids["sample_id"].astype(str)
+    reads = dict(zip(usable_ids["sample_id"], usable_ids["ocr_number"]))
+    grouped = _groups(candidates, reads, parse_number)
     truth = {
         "number": dict(zip(usable_ids["sample_id"], usable_ids["gt_number_key"])),
         "set": dict(zip(usable_ids["sample_id"], usable_ids["gt_set_key"])),

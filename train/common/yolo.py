@@ -96,11 +96,26 @@ def _load_model(path: str | Path, task: str):
     return YOLO(str(path))
 
 
+def _aabb_yaml_text(aabb_dir: Path) -> str:
+    return (
+        f"path: {aabb_dir.resolve().as_posix()}\n"
+        "train: train/images\n"
+        "val: valid/images\n"
+        "test: test/images\n"
+        "nc: 1\n"
+        "names:\n"
+        "  0: card\n"
+    )
+
+
 def ensure_aabb_dataset(cfg: SweepConfig) -> Path:
     if cfg.aabb_dir is None or cfg.aabb_yaml is None:
         raise RuntimeError("AABB não configurado neste sweep.")
     marker = cfg.aabb_dir / ".ok"
+    expected = _aabb_yaml_text(cfg.aabb_dir)
     if cfg.aabb_yaml.is_file() and marker.is_file():
+        if cfg.aabb_yaml.read_text(encoding="utf-8") != expected:
+            cfg.aabb_yaml.write_text(expected, encoding="utf-8")
         return cfg.aabb_yaml
     cfg.aabb_dir.mkdir(parents=True, exist_ok=True)
     for split_name in ("train", "valid", "test"):
@@ -136,16 +151,7 @@ def ensure_aabb_dataset(cfg: SweepConfig) -> Path:
                     w, h = max(x2 - x1, 1e-6), max(y2 - y1, 1e-6)
                     lines_out.append(f"{cls} {xc:.6f} {yc:.6f} {w:.6f} {h:.6f}\n")
             (lab_dst / f"{img.stem}.txt").write_text("".join(lines_out), encoding="utf-8")
-    cfg.aabb_yaml.write_text(
-        f"path: {cfg.aabb_dir.as_posix()}\n"
-        "train: train/images\n"
-        "val: valid/images\n"
-        "test: test/images\n"
-        "nc: 1\n"
-        "names:\n"
-        "  0: card\n",
-        encoding="utf-8",
-    )
+    cfg.aabb_yaml.write_text(expected, encoding="utf-8")
     marker.write_text("ok\n", encoding="utf-8")
     return cfg.aabb_yaml
 

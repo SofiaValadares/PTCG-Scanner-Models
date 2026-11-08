@@ -7,7 +7,7 @@ _SRC = Path(__file__).resolve().parent.parent / "src"
 if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-JOBS = ("detector", "roi", "ocr")
+JOBS = ("detector", "roi", "ocr", "catalog")
 
 USAGE = """\
 Treinos do PTCG Scanner.
@@ -18,7 +18,7 @@ Treinos do PTCG Scanner.
   python -m train ocr        [--report-only] [--pdf] [--max-boxes N] [--treatments]
   python -m train catalog    [--rebuild]
 
-`all` roda detector -> roi -> ocr, nesta ordem (cada um pode levar horas).
+`all` roda detector -> roi -> ocr -> catalog, nesta ordem (cada um pode levar horas).
 `python -m train ocr` grava motores e tratamentos no mesmo README (`train/ocr`).
 `python -m train catalog` compara pesos da decisão e grava `train/catalog/README.md`.
 `--treatments` refaz só o sweep de pré-processamento.
@@ -51,9 +51,11 @@ def _job_main(cmd: str):
 
 
 def _filter_argv(job: str, argv: list[str]) -> list[str]:
-    if job != "ocr":
-        return argv
-    return [a for a in argv if a not in _OCR_SKIP]
+    if job == "ocr":
+        return [a for a in argv if a not in _OCR_SKIP]
+    if job == "catalog":
+        return [a for a in argv if a == "--rebuild"]
+    return argv
 
 
 def _run_all(argv: list[str]) -> int:
@@ -67,7 +69,7 @@ def _run_all(argv: list[str]) -> int:
         if code:
             print(f"\nParou em `{job}` (código {code}).", flush=True)
             return code
-    print("\nOs três treinos terminaram.", flush=True)
+    print("\nOs quatro treinos terminaram.", flush=True)
     return 0
 
 

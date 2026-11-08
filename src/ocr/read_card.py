@@ -122,7 +122,7 @@ def _gray(image: np.ndarray) -> np.ndarray:
 
 
 def enhance_strip(image: np.ndarray, min_h: int = 112) -> np.ndarray:
-    """Amplia a faixa em cinza. Invert ganhou 1 p.p. no sweep; fica fora por não ser significativo."""
+    """Amplia a faixa em cinza. O sweep de `train/ocr` mede os passos extras."""
     gray = _gray(image)
     h, w = gray.shape[:2]
     if h < min_h:
@@ -132,6 +132,70 @@ def enhance_strip(image: np.ndarray, min_h: int = 112) -> np.ndarray:
             (max(8, int(round(w * scale))), min_h),
             interpolation=cv2.INTER_CUBIC,
         )
+    return gray
+
+
+# Produção. O sweep compara outros passos com esta tupla vazia (só upscale).
+# Só muda quando um caminho ganha ≥ 2 p.p. e nenhum tipo de faixa cai ≥ 1 p.p.
+PRODUCTION_STEPS: tuple[str, ...] = ()
+PRODUCTION_FALLBACK = False
+# Campo -> (altura mínima, passos). Ausente = altura padrão e PRODUCTION_STEPS.
+# Coleção: a grade altura × transformação elegeu 208 px + invert (+4.4 p.p., e o invert
+# ganha em todas as alturas). Nome e número não passaram de 2 p.p.
+PRODUCTION_BY_FIELD: dict[str, tuple[int, tuple[str, ...]]] = {
+    "collection": (208, ("invert",)),
+}
+_HEIGHT_STEPS = {
+    "h160": {"collection": 114, "name": 160, "number": 160},
+    "h192": {"collection": 137, "name": 192, "number": 192},
+    "tall_number": {"number": 176},
+}
+FALLBACK_TRIES: tuple[tuple[str, ...], ...] = (
+    ("invert_number",),
+    ("h160",),
+    ("h160", "invert_number"),
+)
+
+
+def prepare_strip(
+    image: np.ndarray,
+    field: str,
+    steps: tuple[str, ...] = (),
+    min_h: int | None = None,
+) -> np.ndarray:
+    """Faixa que o pipeline e o sweep de OCR leem. `steps` vazio e sem `min_h` é a produção."""
+    if min_h is None:
+        min_h = 80 if field == "collection" else 112
+        for step in steps:
+            override = _HEIGHT_STEPS.get(step, {}).get(field)
+            if override:
+                min_h = override
+    gray = enhance_strip(image, min_h)
+    for step in steps:
+        if step in _HEIGHT_STEPS or step == "fallback":
+            continue
+        if step == "invert_number" and field != "number":
+            continue
+        if step == "invert" or step == "invert_number":
+            gray = 255 - gray
+        elif step == "sharpen":
+            blur = cv2.GaussianBlur(gray, (0, 0), 1.0)
+            gray = cv2.addWeighted(gray, 1.5, blur, -0.5, 0)
+        elif step == "stretch":
+            gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
+        elif step == "pad":
+            gray = cv2.copyMakeBorder(gray, 16, 16, 16, 16, cv2.BORDER_CONSTANT, value=255)
+        elif step == "otsu":
+            _, gray = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        elif step == "adaptive":
+            block = 31 if min(gray.shape[:2]) >= 31 else 15
+            if block % 2 == 0:
+                block += 1
+            gray = cv2.adaptiveThreshold(
+                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, block, 8
+            )
+        else:
+            raise KeyError(f"passo de faixa desconhecido: {step}")
     return gray
 
 
@@ -227,6 +291,12 @@ def _slash_confused_number(digits: str) -> tuple[int, int] | None:
         return None
     scored.sort(reverse=True)
     return scored[0][1], scored[0][2]
+
+
+def number_is_plausible(text: str) -> bool:
+    """Colecionador legível. `SWIR`, `D0s` e ano de copyright não passam."""
+    collector, _total = parse_printed_number(text or "")
+    return collector is not None and 1 <= collector <= 400
 
 
 def parse_printed_number(text: str) -> tuple[int | None, int | None]:
@@ -512,15 +582,63 @@ def _easy_ocr_image(reader, enhanced: np.ndarray, field: str) -> tuple[str, floa
     return "", max(conf, 0.0), enhanced
 
 
-def ocr_image(reader, image: np.ndarray, field: str = "name") -> tuple[str, float, np.ndarray]:
-    min_h = 80 if field == "collection" else 112
-    enhanced = enhance_strip(image, min_h=min_h)
-    if hasattr(reader, "readtext"):
-        return _easy_ocr_image(reader, enhanced, field)
+def _recognize_strip(reader, gray: np.ndarray, field: str) -> tuple[str, float]:
     if hasattr(reader, "read_field"):
-        raw, conf = reader.read_field(enhanced, field)
-    else:
-        raw, conf = _rapid_raw(reader, enhanced)
+        return reader.read_field(gray, field)
+    return _rapid_raw(reader, gray)
+
+
+def read_strip_raw(
+    reader,
+    image: np.ndarray,
+    field: str,
+    steps: tuple[str, ...] = (),
+    fallback: bool = False,
+    min_h: int | None = None,
+) -> str:
+    """Texto cru da faixa. O sweep e a pipeline chamam esta função."""
+    raw, _conf, _view = _read_rapid_view(reader, image, field, steps, fallback, min_h)
+    return raw
+
+
+def _read_rapid_view(
+    reader,
+    image: np.ndarray,
+    field: str,
+    steps: tuple[str, ...],
+    fallback: bool,
+    min_h: int | None = None,
+) -> tuple[str, float, np.ndarray]:
+    view = prepare_strip(image, field, steps, min_h=min_h)
+    raw, conf = _recognize_strip(reader, view, field)
+    if field != "number" or not fallback or number_is_plausible(raw):
+        return raw, conf, view
+    for extra in FALLBACK_TRIES:
+        merged = tuple(dict.fromkeys((*steps, *extra)))
+        alt_view = prepare_strip(image, field, merged, min_h=min_h)
+        alt_raw, alt_conf = _recognize_strip(reader, alt_view, field)
+        if number_is_plausible(alt_raw):
+            return alt_raw, alt_conf, alt_view
+    return raw, conf, view
+
+
+def production_spec(field: str) -> tuple[tuple[str, ...], int | None]:
+    """Altura e passos que a pipeline usa neste campo. O sweep passa os seus à parte."""
+    spec = PRODUCTION_BY_FIELD.get(field)
+    if spec is None:
+        return PRODUCTION_STEPS, None
+    height, steps = spec
+    return steps, int(height)
+
+
+def ocr_image(reader, image: np.ndarray, field: str = "name") -> tuple[str, float, np.ndarray]:
+    steps, height = production_spec(field)
+    if hasattr(reader, "readtext"):
+        enhanced = prepare_strip(image, field, steps, min_h=height)
+        return _easy_ocr_image(reader, enhanced, field)
+    raw, conf, enhanced = _read_rapid_view(
+        reader, image, field, steps, PRODUCTION_FALLBACK, height
+    )
     return _clean(field, raw), conf, enhanced
 
 

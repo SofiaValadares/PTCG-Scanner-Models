@@ -13,5 +13,5 @@ OCR name,accuracy,0.8890549122151662
 OCR name,mean CER,0.19616621473576443
 OCR number,accuracy,0.7710123272319761
 OCR number,mean CER,0.2241160740226859
-OCR collection,accuracy vs set name,0.0691072095629436
-End-to-end,catalog hit,0.8625326858423609
+OCR collection,accuracy vs set name,0.08330220395965633
+End-to-end,catalog hit,0.8909226746357863

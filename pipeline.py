@@ -87,7 +87,15 @@ sys.path.insert(0, str(REPO / "src" / "ocr"))
 from crop_from_obb import imgsz_for_weights
 from rectify import crop_result
 import read_card
-from read_card import catalog_language_codes, create_reader, fold_text, parse_printed_number, read_card, script_family
+from read_card import (
+    catalog_language_codes,
+    clean_collection,
+    create_reader,
+    fold_text,
+    parse_printed_number,
+    read_card,
+    script_family,
+)
 
 DATA = REPO / "data"
 EVAL_SOURCE = ARGS.source
@@ -571,6 +579,15 @@ CURRENT_WEIGHTS = {
 _EMPTY_MATCH = ["name", "number", "set_id", "set_name", "rarity", "lang", "score"]
 
 
+def _collector_digits(value) -> str:
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return ""
+    try:
+        return str(int(value))
+    except (TypeError, ValueError):
+        return ""
+
+
 def _collector_distance(collectors: pd.Series, ocr_number: str) -> np.ndarray:
     """Distância até o colecionador lido. Sem número comparável, a ordem original fica."""
     read, _total = parse_number(ocr_number)
@@ -579,6 +596,28 @@ def _collector_distance(collectors: pd.Series, ocr_number: str) -> np.ndarray:
         return np.zeros(len(values), dtype=np.float64)
     distance = np.abs(values - float(read))
     return np.where(np.isfinite(values), distance, np.float64(1e9))
+
+
+def _digit_overlap(collectors: pd.Series, ocr_number: str) -> np.ndarray:
+    """Quantos dígitos o colecionador do catálogo reparte com o número lido."""
+    read, _total = parse_number(ocr_number)
+    overlap = np.empty(len(collectors), dtype=np.int16)
+    if read is None:
+        overlap.fill(0)
+        return overlap
+    read_counts: dict[str, int] = {}
+    for char in str(int(read)):
+        read_counts[char] = read_counts.get(char, 0) + 1
+    for index, value in enumerate(pd.to_numeric(collectors, errors="coerce").to_numpy()):
+        other = _collector_digits(value)
+        if not other:
+            overlap[index] = -1
+            continue
+        counts: dict[str, int] = {}
+        for char in other:
+            counts[char] = counts.get(char, 0) + 1
+        overlap[index] = sum(min(qty, counts.get(char, 0)) for char, qty in read_counts.items())
+    return overlap
 
 
 def apply_decision_weights(frame: pd.DataFrame, weights: dict | None = None) -> np.ndarray:
@@ -667,16 +706,117 @@ def match_catalog(
     """Só tenta acertar a carta se o OCR leu o número. Sem número, não chuta.
 
     Ordem pedida: número + coleção + nome > número + coleção > número + nome.
-    Nota igual fica com o colecionador mais perto do número lido.
+    Nota igual fica com quem tem mais dígitos em comum com o número lido.
+    Se a quantidade empata, fica a menor diferença absoluta.
     """
     scored = match_features(ocr_name, ocr_number, ocr_collection, catalog, set_id=set_id)
     if scored.empty or "name_score" not in scored.columns:
         return pd.DataFrame(columns=_EMPTY_MATCH)
     scored = scored.copy()
     scored["score"] = apply_decision_weights(scored, weights)
+    scored["_overlap"] = _digit_overlap(scored["collector"], ocr_number)
     scored["_distance"] = _collector_distance(scored["collector"], ocr_number)
-    ranked = scored.sort_values(["score", "_distance"], ascending=[False, True], kind="mergesort")
-    return ranked.drop(columns="_distance").head(top_n).reset_index(drop=True)
+    ranked = scored.sort_values(
+        ["score", "_overlap", "_distance"],
+        ascending=[False, False, True],
+        kind="mergesort",
+    )
+    return ranked.drop(columns=["_overlap", "_distance"]).head(top_n).reset_index(drop=True)
+
+
+# Voto da página. 65% das cartas já confirmadas (número lido = número escolhido)
+# têm de cair no mesmo conjunto. 70% deixava 9 cartas na mesa; 50% começa a
+# derrubar um acerto. Só reescreve carta sem coleção lida pelo detector.
+PAGE_SET_SHARE = 0.65
+
+
+def _confirmed_set(row: dict) -> str:
+    """Conjunto de uma carta cujo número lido fecha com a carta escolhida."""
+    read, _total = parse_number(str(row.get("ocr_number") or ""))
+    chosen, _chosen_total = parse_number(str(row.get("match_number") or ""))
+    match_set = _collection_key(str(row.get("match_set") or ""))
+    if read is None or chosen is None or read != chosen or not match_set:
+        return ""
+    return match_set
+
+
+def _collection_detected(row: dict) -> bool:
+    """Coleção com caixa do detector e um código lido. Essas cartas não entram no voto."""
+    if str(row.get("roi_collection_src") or "") != "det":
+        return False
+    return bool(clean_collection(str(row.get("ocr_collection") or "")))
+
+
+def _page_set_vote(rows: list[dict]) -> str:
+    votes = [code for code in (_confirmed_set(row) for row in rows) if code]
+    if len(votes) < 2:
+        return ""
+    counts: dict[str, int] = {}
+    for code in votes:
+        counts[code] = counts.get(code, 0) + 1
+    vote, n_vote = max(counts.items(), key=lambda item: item[1])
+    if n_vote / len(votes) < PAGE_SET_SHARE:
+        return ""
+    return vote
+
+
+def _assign_match(row: dict, ranked: pd.DataFrame) -> None:
+    best = ranked.iloc[0] if len(ranked) else None
+    row["ranked"] = ranked
+    row["match_name"] = "" if best is None else best["name"]
+    row["match_name_en"] = _catalog_cell(best, "name_en")
+    row["match_name_pt"] = _catalog_cell(best, "name_pt")
+    row["match_number"] = "" if best is None else best["number"]
+    row["match_set"] = "" if best is None else best["set_id"]
+    row["match_file"] = "" if best is None else best["set_name"]
+    row["match_set_name_en"] = _catalog_cell(best, "set_name_en")
+    row["match_set_name_pt"] = _catalog_cell(best, "set_name_pt")
+    row["match_rarity"] = "" if best is None else best["rarity"]
+    row["match_lang"] = _catalog_cell(best, "lang")
+    row["match_score"] = 0.0 if best is None else float(best["score"])
+
+
+def _unique_name_in_set(ocr_name: str, pool: pd.DataFrame) -> pd.DataFrame:
+    """Uma carta só com esse nome no conjunto. Sem número legível, não escolhe entre duas."""
+    query = fold(ocr_name)
+    if not query or pool.empty:
+        return pd.DataFrame(columns=_EMPTY_MATCH)
+    family = script_family(query)
+    names = pool if family in ("none", "") else pool.loc[pool["script"] == family]
+    exact = names.loc[names["name_fold"] == query]
+    collectors = [value for value in exact["collector"].dropna().unique().tolist()]
+    if len(collectors) != 1:
+        return pd.DataFrame(columns=_EMPTY_MATCH)
+    chosen = exact.loc[exact["collector"] == collectors[0]].head(1).copy()
+    chosen["score"] = float(CURRENT_WEIGHTS["name_w"])
+    return chosen.reset_index(drop=True)
+
+
+def _apply_page_set(rows: list[dict]) -> None:
+    vote = _page_set_vote(rows)
+    if not vote:
+        return
+    pool = catalog.loc[catalog["set_id"].map(_collection_key) == vote]
+    if pool.empty:
+        return
+    for row in rows:
+        if _confirmed_set(row) or _collection_detected(row):
+            continue
+        if _collection_key(str(row.get("match_set") or "")) == vote:
+            continue
+        ranked = match_catalog(
+            str(row.get("ocr_name") or ""),
+            str(row.get("ocr_number") or ""),
+            str(row.get("ocr_collection") or ""),
+            pool,
+            set_id=vote,
+            top_n=3,
+        )
+        if ranked.empty or float(ranked.iloc[0].get("name_score", 0) or 0) < 1.0:
+            ranked = _unique_name_in_set(str(row.get("ocr_name") or ""), pool)
+        if ranked.empty:
+            continue
+        _assign_match(row, ranked)
 
 
 demo = match_catalog("Alakazam", "1/130", "", catalog, set_id="B2", top_n=3)
@@ -1149,6 +1289,7 @@ def extract_page(bgr: np.ndarray, image_name: str, set_id: str, page_i: int) -> 
                 },
             )
         )
+    _apply_page_set(rows)
     return rows, obb_vis, crop_vis, ocr_vis
 
 

@@ -7,7 +7,7 @@ Papel: **detector de ROI**. Runs (gitignored): `runs/roi/ocr-roi-v3`. Peso de pr
 
 | Item | Valor |
 | --- | --- |
-| Data/hora | 2026-11-05 16:54:44 |
+| Data/hora | 2026-11-08 18:02:35 |
 | SO | Windows 11 |
 | Python | 3.14.7 |
 | PyTorch | 2.11.0+cu128 |
@@ -18,9 +18,9 @@ Papel: **detector de ROI**. Runs (gitignored): `runs/roi/ocr-roi-v3`. Peso de pr
 | VRAM | 8.0 GB |
 | Dispositivo de treino | 0 |
 | cuDNN | True |
-| cwd | C:\Users\Pichau\Documents\Repositorios\TCGTradeSegmentacao |
-| runs_dir | C:\Users\Pichau\Documents\Repositorios\TCGTradeSegmentacao\runs\roi |
-| weights_dir | C:\Users\Pichau\Documents\Repositorios\TCGTradeSegmentacao\pretrained |
+| cwd | C:\Users\Pichau\OneDrive\Documentos\Repositorios\TCGTradeSegmentacao |
+| runs_dir | C:\Users\Pichau\OneDrive\Documentos\Repositorios\TCGTradeSegmentacao\runs\roi |
+| weights_dir | C:\Users\Pichau\OneDrive\Documentos\Repositorios\TCGTradeSegmentacao\pretrained |
 
 ## Receita
 
@@ -47,25 +47,25 @@ Papel: **detector de ROI**. Runs (gitignored): `runs/roi/ocr-roi-v3`. Peso de pr
 
 | winner | family | model | task | imgsz | batch | epochs | hours | val_precision | val_recall | val_f1 | val_map50 | val_map75 | val_map50_95 | val_infer_ms | val_colection_map50_95 | val_name_map50_95 | val_number_map50_95 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ← | YOLOv8 | yolov8s-obb.pt | obb | 800 | 8 | 123 | 0.0020 | 0.9973 | 0.9959 | 0.9966 | 0.9938 | 0.9930 | 0.9654 | 5.3458 | 0.9724 | 0.9653 | 0.9586 |
-|  | YOLOv26 | yolo26s-obb.pt | obb | 800 | 8 | 80 | 0.0540 | 0.9961 | 0.9988 | 0.9975 | 0.9945 | 0.9894 | 0.9645 | 5.5548 | 0.9738 | 0.9607 | 0.9589 |
-|  | YOLOv11 | yolo11s-obb.pt | obb | 800 | 8 | 159 | 0.0020 | 0.9953 | 0.9973 | 0.9963 | 0.9934 | 0.9886 | 0.9622 | 5.1542 | 0.9734 | 0.9589 | 0.9544 |
-|  | YOLOv12 | yolo12n-obb.yaml | obb | 800 | 8 | 257 | 0.0020 | 0.9972 | 0.9989 | 0.9980 | 0.9944 | 0.9873 | 0.9068 | 3.7828 | 0.9320 | 0.8748 | 0.9137 |
+| ← | YOLOv8 | yolov8s-obb.pt | obb | 800 | 8 | 123 | 0.0030 | 0.9973 | 0.9959 | 0.9966 | 0.9938 | 0.9930 | 0.9654 | 7.0800 | 0.9724 | 0.9653 | 0.9586 |
+|  | YOLOv26 | yolo26s-obb.pt | obb | 800 | 8 | 80 | 0.0590 | 0.9961 | 0.9988 | 0.9975 | 0.9945 | 0.9894 | 0.9645 | 7.1282 | 0.9738 | 0.9607 | 0.9589 |
+|  | YOLOv11 | yolo11s-obb.pt | obb | 800 | 8 | 159 | 0.0030 | 0.9953 | 0.9973 | 0.9963 | 0.9934 | 0.9886 | 0.9622 | 6.6530 | 0.9734 | 0.9589 | 0.9544 |
+|  | YOLOv12 | yolo12n-obb.yaml | obb | 800 | 8 | 257 | 0.0030 | 0.9972 | 0.9989 | 0.9980 | 0.9944 | 0.9873 | 0.9068 | 5.0959 | 0.9320 | 0.8748 | 0.9137 |
 
 ## Ranking — teste (todas as famílias)
 
 | winner | family | test_precision | test_recall | test_f1 | test_map50 | test_map75 | test_map50_95 | test_infer_ms | test_colection_map50_95 | test_name_map50_95 | test_number_map50_95 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ← | YOLOv8 | 0.9983 | 0.9995 | 0.9989 | 0.9950 | 0.9909 | 0.9680 | 5.2769 | 0.9799 | 0.9694 | 0.9546 |
-|  | YOLOv26 | 0.9993 | 1.0000 | 0.9996 | 0.9950 | 0.9910 | 0.9719 | 5.3024 | 0.9816 | 0.9758 | 0.9582 |
-|  | YOLOv11 | 0.9993 | 0.9977 | 0.9985 | 0.9950 | 0.9877 | 0.9640 | 5.1460 | 0.9835 | 0.9719 | 0.9365 |
-|  | YOLOv12 | 1.0000 | 0.9977 | 0.9988 | 0.9950 | 0.9800 | 0.9068 | 3.6259 | 0.9390 | 0.8819 | 0.8993 |
+| ← | YOLOv8 | 0.9983 | 0.9995 | 0.9989 | 0.9950 | 0.9909 | 0.9680 | 6.9219 | 0.9799 | 0.9694 | 0.9546 |
+|  | YOLOv26 | 0.9993 | 1.0000 | 0.9996 | 0.9950 | 0.9910 | 0.9719 | 6.7398 | 0.9816 | 0.9758 | 0.9582 |
+|  | YOLOv11 | 0.9993 | 0.9977 | 0.9985 | 0.9950 | 0.9877 | 0.9640 | 6.7876 | 0.9835 | 0.9719 | 0.9365 |
+|  | YOLOv12 | 1.0000 | 0.9977 | 0.9988 | 0.9950 | 0.9800 | 0.9068 | 4.8043 | 0.9390 | 0.8819 | 0.8993 |
 
 ## Modelo eleito
 
 **YOLOv8** (`yolov8`, checkpoint `yolov8s-obb.pt`).
 
-- val mAP50-95 = **0.9654** · mAP75 = 0.9930 · F1 = 0.997 · 5.3 ms
+- val mAP50-95 = **0.9654** · mAP75 = 0.9930 · F1 = 0.997 · 7.1 ms
 - test mAP50-95 = **0.9680** · mAP75 = 0.9909 · F1 = 0.999
 - Peso copiado para `models/ocr-roi-v3.pt`.
 

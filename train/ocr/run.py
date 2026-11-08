@@ -22,11 +22,15 @@ from train.common.ranking import markdown_table
 from train.common.report import write_ocr_pdf, write_ocr_readme
 from train.ocr.preprocess import (
     ADD_OPS,
+    FALLBACK_LABEL,
+    SCALE_BASE,
+    SCALE_HEIGHTS,
+    SCALE_OPS,
     TECHNIQUES,
-    apply_pipeline,
-    apply_treatment,
     mix_key,
     mix_label,
+    mixable,
+    scale_key,
     technique_steps,
 )
 
@@ -149,6 +153,8 @@ def load_engines(wanted: tuple[str, ...] | None = None):
         _readtext,
         _strip_variants,
         enhance_strip,
+        prepare_strip,
+        read_strip_raw,
     )
 
     wanted = wanted or ENGINES
@@ -204,16 +210,16 @@ def load_engines(wanted: tuple[str, ...] | None = None):
         "readtext": _readtext,
         "variants": _strip_variants,
         "enhance": enhance_strip,
+        "prepare": prepare_strip,
+        "read_strip": read_strip_raw,
     }
 
 
 def _readers(reader, paddle, helpers):
-    enhance = helpers["enhance"]
     allow = helpers["allow"]
 
     def easy_raw(image: np.ndarray, field: str) -> str:
-        min_h = 80 if field == "collection" else 112
-        enhanced = enhance(image, min_h=min_h)
+        enhanced = helpers["prepare"](image, field)
 
         def _run(view: np.ndarray) -> tuple[str, float]:
             rgb = cv2.cvtColor(view, cv2.COLOR_GRAY2RGB)
@@ -235,33 +241,12 @@ def _readers(reader, paddle, helpers):
         return text
 
     def paddle_raw(image: np.ndarray, field: str) -> str:
-        min_h = 80 if field == "collection" else 112
-        gray = enhance(image, min_h=min_h)
-        view = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR) if gray.ndim == 2 else gray
-        try:
-            result = paddle(view, use_det=False, use_cls=False)
-        except TypeError:
-            result = paddle(view)
-        texts = [str(item).strip() for item in (getattr(result, "txts", None) or []) if str(item).strip()]
-        if texts:
-            return " ".join(texts)
-        if isinstance(result, (list, tuple)):
-            parts = []
-            blob = result[0] if result and isinstance(result[0], list) else result
-            for item in blob or []:
-                if isinstance(item, (list, tuple)) and len(item) >= 2:
-                    payload = item[1]
-                    if isinstance(payload, (list, tuple)):
-                        parts.append(str(payload[0]).strip())
-                    else:
-                        parts.append(str(payload).strip())
-            return " ".join(p for p in parts if p)
-        return ""
+        return helpers["read_strip"](paddle, image, field)
 
     def tesseract_raw(image: np.ndarray, field: str) -> str:
         import pytesseract
 
-        view = enhance(image, min_h=80 if field == "collection" else 112)
+        view = helpers["prepare"](image, field)
         config = "--psm 7"
         if field == "number":
             config += " -c tessedit_char_whitelist=0123456789/OoQqDdIiLlZzSsGgBb"
@@ -274,42 +259,24 @@ def _readers(reader, paddle, helpers):
     return {"easyocr": easy_raw, "paddleocr": paddle_raw, "tesseract": tesseract_raw}
 
 
-def _rapid_text(paddle, gray: np.ndarray) -> str:
-    view = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR) if gray.ndim == 2 else gray
-    try:
-        result = paddle(view, use_det=False, use_cls=False)
-    except TypeError:
-        result = paddle(view)
-    texts = [str(item).strip() for item in (getattr(result, "txts", None) or []) if str(item).strip()]
-    if texts:
-        return " ".join(texts)
-    if isinstance(result, (list, tuple)):
-        parts = []
-        blob = result[0] if result and isinstance(result[0], list) else result
-        for item in blob or []:
-            if isinstance(item, (list, tuple)) and len(item) >= 2:
-                payload = item[1]
-                if isinstance(payload, (list, tuple)):
-                    parts.append(str(payload[0]).strip())
-                else:
-                    parts.append(str(payload).strip())
-        return " ".join(p for p in parts if p)
-    return ""
-
-
 def _treatment_readers(paddle):
+    from ocr.read_card import read_strip_raw
+
     readers = {}
     for kind, _label in TECHNIQUES:
 
         def _read(image: np.ndarray, field: str, *, _kind=kind) -> str:
-            view = apply_treatment(image, field, _kind)
-            return _rapid_text(paddle, view)
+            if _kind == "fallback":
+                return read_strip_raw(paddle, image, field, (), fallback=True)
+            return read_strip_raw(paddle, image, field, technique_steps(_kind))
 
         readers[kind] = _read
     return readers
 
 
 def _mix_readers(paddle, candidates: list[tuple[str, ...]]):
+    from ocr.read_card import read_strip_raw
+
     readers = {}
     labels = {}
     for steps in candidates:
@@ -317,8 +284,7 @@ def _mix_readers(paddle, candidates: list[tuple[str, ...]]):
         labels[key] = mix_label(steps)
 
         def _read(image: np.ndarray, field: str, *, _steps=steps) -> str:
-            view = apply_pipeline(image, field, _steps)
-            return _rapid_text(paddle, view)
+            return read_strip_raw(paddle, image, field, _steps)
 
         readers[key] = _read
     return readers, labels
@@ -572,7 +538,9 @@ def run_greedy_mix(
         nonlocal best_label, best_score, best_steps
         if not left:
             return
-        candidates = [base + (op,) for op in left]
+        candidates = [base + (op,) for op in left if mixable(base, op)]
+        if not candidates:
+            return
         readers, labels = _mix_readers(paddle, candidates)
         active = [mix_key(steps) for steps in candidates]
         title = f"OCR mix {mix_label(base)}"
@@ -678,7 +646,7 @@ def _save_charts(
     published: list[tuple[str, Path]] = []
     stem = prefix or ""
     rotate = len(summary) > 4
-    width = 9.4 if rotate else 7.2
+    width = max(9.4 if rotate else 7.2, 0.9 * len(summary))
 
     fig, ax = plt.subplots(figsize=(width, 3.8 if rotate else 3.6))
     ax.bar(summary["motor"], summary["exact_clean"], color="#3b6ea5")
@@ -694,8 +662,8 @@ def _save_charts(
     published.append((title, compress_image(raw, raw, jpeg=False)))
 
     if not by_tipo.empty:
-        fig, ax = plt.subplots(figsize=(max(width, 8.0), 4.0 if rotate else 3.8))
         motors = [c for c in by_tipo.columns if c != "tipo" and c != "n"]
+        fig, ax = plt.subplots(figsize=(max(width, 8.0, 1.15 * len(motors)), 4.0 if rotate else 3.8))
         x = np.arange(len(by_tipo))
         bar_w = 0.8 / max(len(motors), 1)
         for i, motor in enumerate(motors):
@@ -845,6 +813,224 @@ def run_ocr_pass(samples, readers, active, *, clean, fold_for, same_field, title
     return pd.DataFrame(rows)
 
 
+_SCALE_MARK = "## Altura × transformação por campo"
+_FIELD_PT = {"name": "nome", "number": "número", "collection": "coleção"}
+
+
+def _scale_ops(field: str) -> tuple[tuple[tuple[str, ...], str], ...]:
+    if field == "number":
+        return SCALE_OPS + ((("invert_number",), "inverte número"),)
+    return SCALE_OPS
+
+
+def _scale_markdown(table: pd.DataFrame, elected: list[dict]) -> str:
+    lines = [
+        _SCALE_MARK,
+        "",
+        "Cada célula é o `exact_clean` daquela altura com aquela transformação. "
+        "Nome, número e coleção são medidos à parte, então cada um pode ficar com uma combinação diferente. "
+        "A base de produção é 112 px no nome e no número e 80 px na coleção, sem transformação extra. "
+        "Otsu, adaptativo e borda branca ficam de fora: no sweep anterior caíram cerca de 25 p.p. "
+        "Um campo só entra na pipeline se o ganho dele for ≥ 2 p.p.",
+        "",
+        "![Acerto por altura e transformação](figures/scale_by_field.png)",
+        "",
+    ]
+    for field in ("name", "number", "collection"):
+        sub = table[table["campo"] == field]
+        if sub.empty:
+            continue
+        n = int(sub["n"].iloc[0])
+        base = float(sub["base"].iloc[0])
+        ops = [label for _steps, label in _scale_ops(field)]
+        header = "| altura | " + " | ".join(ops) + " |"
+        sep = "|---:|" + "|".join("---:" for _ in ops) + "|"
+        body = [header, sep]
+        for height in SCALE_HEIGHTS:
+            cells = []
+            for op in ops:
+                hit = sub[(sub["altura"] == height) & (sub["transformacao"] == op)]
+                cells.append(f"{float(hit['acerto'].iloc[0]):.1f}" if len(hit) else "")
+            body.append(f"| {height} | " + " | ".join(cells) + " |")
+        pick = next(item for item in elected if item["campo"] == field)
+        verdict = "Vale" if pick["vale"] else "Não vale"
+        lines += [
+            f"### {_FIELD_PT[field]} (n={n}, base {base:.1f}%)",
+            "",
+            *body,
+            "",
+            (
+                f"Melhor: altura **{pick['altura']}** + **{pick['transformacao']}** "
+                f"= {pick['acerto']:.2f}% ({pick['ganho_pp']:+.2f} p.p., SE {pick['se_pp']:.1f}). {verdict}."
+            ),
+            "",
+        ]
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _upsert_scale_section(readme: Path, section: str) -> None:
+    body = readme.read_text(encoding="utf-8") if readme.is_file() else ""
+    if _SCALE_MARK in body:
+        body = body.split(_SCALE_MARK)[0].rstrip() + "\n\n"
+    elif body and not body.endswith("\n"):
+        body += "\n"
+    if body and not body.endswith("\n\n"):
+        body = body.rstrip() + "\n\n"
+    readme.write_text(body + section, encoding="utf-8")
+
+
+def _save_scale_figure(docs_dir: Path, table: pd.DataFrame) -> Path:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(1, 3, figsize=(13.2, 4.4))
+    image = None
+    for ax, field in zip(axes, ("name", "number", "collection")):
+        sub = table[table["campo"] == field]
+        ops = [label for _steps, label in _scale_ops(field)]
+        grid = np.zeros((len(SCALE_HEIGHTS), len(ops)))
+        for i, height in enumerate(SCALE_HEIGHTS):
+            for j, op in enumerate(ops):
+                hit = sub[(sub["altura"] == height) & (sub["transformacao"] == op)]
+                grid[i, j] = float(hit["acerto"].iloc[0]) if len(hit) else 0.0
+        image = ax.imshow(grid, vmin=50, vmax=95, cmap="viridis", aspect="auto")
+        ax.set_xticks(range(len(ops)), ops, rotation=30, ha="right")
+        ax.set_yticks(range(len(SCALE_HEIGHTS)), [str(h) for h in SCALE_HEIGHTS])
+        ax.set_title(f"{_FIELD_PT[field]} (%)")
+        ax.set_ylabel("altura (px)" if field == "name" else "")
+        for i in range(grid.shape[0]):
+            for j in range(grid.shape[1]):
+                ax.text(j, i, f"{grid[i, j]:.0f}", ha="center", va="center", color="white", fontsize=7)
+    if image is not None:
+        fig.colorbar(image, ax=axes, fraction=0.03, pad=0.04)
+    fig.suptitle("Acerto por altura e transformação")
+    fig.subplots_adjust(top=0.88, wspace=0.35)
+    fig_dir = docs_dir / "figures"
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    raw = fig_dir / "scale_by_field.png"
+    fig.savefig(raw, dpi=110)
+    plt.close(fig)
+    return compress_image(raw, raw, jpeg=False)
+
+
+def run_scale_grid(samples, paddle, pack, docs_dir: Path, runs: Path) -> dict:
+    """Altura × transformação, com o melhor de cada campo separado."""
+    from ocr.read_card import read_strip_raw
+
+    details = {}
+    rows: list[dict] = []
+    elected: list[dict] = []
+    for field in ("name", "number", "collection"):
+        field_samples = [sample for sample in samples if sample["field"] == field and sample["legivel"]]
+        keys = []
+        readers = {}
+        for height in SCALE_HEIGHTS:
+            for steps, _label in _scale_ops(field):
+                key = scale_key(height, steps)
+                keys.append(key)
+
+                def _read(image: np.ndarray, sample_field: str, *, _h=height, _steps=steps) -> str:
+                    return read_strip_raw(paddle, image, sample_field, _steps, min_h=_h)
+
+                readers[key] = _read
+        detail = run_ocr_pass(
+            field_samples, readers, keys, title=f"OCR escala {_FIELD_PT[field]}", **pack
+        )
+        detail.to_csv(runs / f"ocr-scale-v1_{field}.csv", index=False, encoding="utf-8")
+        details[field] = detail
+        chunk = detail[detail["legivel"]]
+        n = int(len(chunk))
+        base_key = scale_key(SCALE_BASE[field], ())
+        base = float(chunk[f"ok_clean_{base_key}"].mean() * 100.0) if n else 0.0
+        best = None
+        for height in SCALE_HEIGHTS:
+            for steps, label in _scale_ops(field):
+                key = scale_key(height, steps)
+                acc = float(chunk[f"ok_clean_{key}"].mean() * 100.0) if n else 0.0
+                cer_mean = float(chunk[f"cer_clean_{key}"].mean()) if n else 1.0
+                rec = {
+                    "campo": field,
+                    "altura": height,
+                    "transformacao": label,
+                    "passos": "+".join(steps),
+                    "acerto": round(acc, 2),
+                    "cer": round(cer_mean, 4),
+                    "n": n,
+                    "base": round(base, 2),
+                    "delta_pp": round(acc - base, 2),
+                    "chave": key,
+                }
+                rows.append(rec)
+                rank = (acc, -cer_mean, -height, -len(steps))
+                if best is None or rank > best["rank"]:
+                    best = {**rec, "rank": rank}
+        gain = float(best["acerto"]) - base
+        elected.append(
+            {
+                **best,
+                "ganho_pp": round(gain, 2),
+                "se_pp": round(_se_pp(base, n), 1),
+                "vale": gain >= MIN_GAIN_PP,
+                "base_altura": SCALE_BASE[field],
+            }
+        )
+    table = pd.DataFrame(rows)
+    table.to_csv(runs / "ocr-scale-v1_grid.csv", index=False, encoding="utf-8")
+    figure = _save_scale_figure(docs_dir, table)
+    chosen = []
+    base_flags = []
+    for field in ("name", "number", "collection"):
+        pick = next(item for item in elected if item["campo"] == field)
+        use = pick if pick["vale"] else None
+        key = pick["chave"] if use else scale_key(SCALE_BASE[field], ())
+        chunk = details[field][details[field]["legivel"]]
+        chosen.append(chunk[f"ok_clean_{key}"].astype(bool))
+        base_flags.append(chunk[f"ok_clean_{scale_key(SCALE_BASE[field], ())}"].astype(bool))
+    policy = float(pd.concat(chosen).mean() * 100.0) if chosen else 0.0
+    baseline = float(pd.concat(base_flags).mean() * 100.0) if base_flags else 0.0
+    print("\nAltura × transformação (melhor de cada campo):")
+    for pick in elected:
+        verdict = "vale" if pick["vale"] else "não vale"
+        print(
+            f"  {_FIELD_PT[pick['campo']]}: altura {pick['altura']} + {pick['transformacao']} "
+            f"{pick['acerto']:.2f}% ({pick['ganho_pp']:+.2f} p.p., SE {pick['se_pp']:.1f}) — {verdict}"
+        )
+    print(f"Política por campo: {policy:.2f}% vs base {baseline:.2f}% ({policy - baseline:+.2f} p.p.)")
+    section = _scale_markdown(table, elected)
+    adopted = [
+        f"{_FIELD_PT[item['campo']]} (altura {item['altura']} + {item['transformacao']})"
+        for item in elected
+        if item["vale"]
+    ]
+    adopt_line = (
+        "Entra na pipeline: " + ", ".join(adopted) + "."
+        if adopted
+        else "Nenhum campo entra na pipeline."
+    )
+    section += (
+        f"\nJuntando o melhor de cada campo que passa a barra, o acerto geral fica "
+        f"**{policy:.2f}%** contra **{baseline:.2f}%** da base ({policy - baseline:+.2f} p.p.). "
+        f"{adopt_line}\n"
+    )
+    _upsert_scale_section(docs_dir / "README.md", section)
+    summary = {
+        "policy": round(policy, 2),
+        "baseline": round(baseline, 2),
+        "gain_pp": round(policy - baseline, 2),
+        "figure": str(figure),
+        "fields": [
+            {k: v for k, v in pick.items() if k != "rank"}
+            for pick in elected
+        ],
+    }
+    (runs / "ocr-scale-v1_elected.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    return summary
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Compara motores de OCR e pré-processamentos da faixa; grava o relatório único em train/ocr."
@@ -857,6 +1043,11 @@ def main(argv: list[str] | None = None) -> int:
         "--treatments",
         action="store_true",
         help="Só o sweep de tratamentos. O ranking de motores já gravado entra no mesmo README.",
+    )
+    parser.add_argument(
+        "--scale",
+        action="store_true",
+        help="Só a grade de altura × transformação, separada por campo.",
     )
     args = parser.parse_args(argv)
 
@@ -891,11 +1082,13 @@ def main(argv: list[str] | None = None) -> int:
         "A classe YOLO é o texto impresso (não name/number/colection).",
         "exact_clean usa os limpadores de `read_card.py` (o que o pipeline veria).",
         "Caixas `--` / ilegíveis saem do ranking.",
-        "Motores e produção usam `enhance_strip` (só upscale, sem CLAHE e sem invert).",
-        "Cinco técnicas individuais (RapidOCR fixo): upscale, invert, borda branca, Otsu, adaptativo.",
-        "A busca gulosa parte da melhor individual e mistura as outras; ramo que piora para.",
-        "No fim, a mistura vencedora é confrontada com o upscale de produção.",
-        "Só vale a pena (e entra em `enhance_strip`) com ganho ≥ 2 p.p. e nenhum tipo caindo ≥ 1 p.p.",
+        "Motores e produção leem por `prepare_strip` / `read_strip_raw` em `read_card.py`.",
+        "Produção hoje é só upscale. Altura 160, altura 192, número alto, invert, inverte número, nitidez, contraste, borda branca, Otsu e adaptativo entram na rodada 1.",
+        "Fallback número lê de novo quando a primeira leitura não parece um colecionador (invertido, altura 160, os dois).",
+        "A busca gulosa parte da melhor técnica de pixel. Não mistura duas alturas nem dois inverts, e não entra no fallback.",
+        "No fim, a mistura e o fallback são confrontados com o upscale de produção.",
+        "Só vale a pena (e entra na pipeline) com ganho ≥ 2 p.p. e nenhum tipo de faixa caindo ≥ 1 p.p.",
+        "A grade de altura (64 a 256) cruza invert, nitidez e contraste. O número também testa o invert só nele. Cada campo pode eleger a sua célula.",
     ]
     mix_log_path = runs / "ocr-mix-v1_log.txt"
     mix_final_path = runs / "ocr-mix-v1_final.txt"
@@ -922,7 +1115,8 @@ def main(argv: list[str] | None = None) -> int:
         treat_elect = None
         if treat_winner:
             treat_elect = (
-                f"**{treat_winner}** foi a melhor das cinco técnicas sozinhas e virou a raiz da busca gulosa."
+                f"**{treat_winner}** foi a melhor técnica sozinha. "
+                "A busca gulosa mistura passos de pixel em cima da melhor técnica que não é o fallback."
             )
         write_ocr_readme(
             repo=repo,
@@ -1066,6 +1260,14 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
 
+    if args.scale and not treatments_only:
+        _loaded, _active, _reader, paddle, _tess, _helpers = load_engines(("paddleocr",))
+        _ = _loaded
+        if paddle is None:
+            raise RuntimeError("RapidOCR não carregou.")
+        run_scale_grid(samples, paddle, pack, docs_dir, runs)
+        return 0
+
     summary = by_tipo = pd.DataFrame()
     winner = "RapidOCR (Paddle)"
     figures: list[tuple[str, Path]] = []
@@ -1126,10 +1328,20 @@ def main(argv: list[str] | None = None) -> int:
             n_readable = int(summary["n"].iloc[0]) if "n" in summary.columns else n_readable
         elif summary.empty:
             summary, by_tipo, winner = treat_summary, treat_by_tipo, treat_winner
-    root_score = float(treat_summary.loc[treat_summary["motor"] == treat_winner, "exact_clean"].iloc[0])
+    pixel_summary = treat_summary[treat_summary["motor"] != FALLBACK_LABEL]
+    greedy_label = pick_ocr_winner(pixel_summary) if len(pixel_summary) else treat_winner
+    if treat_winner == FALLBACK_LABEL:
+        greedy_label = pick_ocr_winner(pixel_summary)
+    root_score = float(treat_summary.loc[treat_summary["motor"] == greedy_label, "exact_clean"].iloc[0])
     mix_log, mix_winner, mix_score, mix_steps = run_greedy_mix(
-        samples, paddle, pack, _kind_from_label(treat_winner), root_score
+        samples, paddle, pack, _kind_from_label(greedy_label), root_score
     )
+    if treat_winner == FALLBACK_LABEL:
+        mix_log.insert(
+            0,
+            f"- A melhor individual foi **{FALLBACK_LABEL}**. "
+            f"A busca gulosa parte de **{greedy_label}**, porque o fallback é uma segunda leitura.",
+        )
     print(f"\nMistura final: {mix_winner}  ({mix_score:.2f}%)")
     mix_log_path.write_text("\n".join(mix_log) + "\n", encoding="utf-8")
     mix_final_path.write_text(f"{mix_winner} ({mix_score:.2f}%)\n", encoding="utf-8")
@@ -1142,6 +1354,26 @@ def main(argv: list[str] | None = None) -> int:
         worth = None
     if worth is None:
         worth = run_worth_eval(samples, paddle, pack, mix_steps, mix_winner, mix_score)
+    fb_row = treat_summary.loc[treat_summary["motor"] == FALLBACK_LABEL]
+    fb_worth = None
+    if not fb_row.empty:
+        fb_worth = worth_from_tables(
+            treat_summary,
+            treat_by_tipo,
+            FALLBACK_LABEL,
+            float(fb_row.iloc[0]["exact_clean"]),
+            treat_detail,
+            "fallback",
+        )
+    if fb_worth is not None:
+        print_worth(fb_worth)
+        mix_log.append(
+            f"- {FALLBACK_LABEL}: {fb_worth['mix_score']:.2f}% "
+            f"({fb_worth['gain_pp']:+.2f} p.p. vs upscale). {fb_worth['verdict']}"
+        )
+        mix_log_path.write_text("\n".join(mix_log) + "\n", encoding="utf-8")
+        if fb_worth["worth"] and (not worth["worth"] or fb_worth["mix_score"] >= worth["mix_score"]):
+            worth = fb_worth
     print_worth(worth)
     worth_path.write_text(json.dumps(worth, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     show_ids = [kind for kind in treat_ids]
@@ -1183,6 +1415,12 @@ def main(argv: list[str] | None = None) -> int:
         mix_score=mix_score,
         worth=worth,
     )
+    if paddle is None:
+        _loaded, _active, _reader, paddle, _tess, _helpers = load_engines(("paddleocr",))
+        _ = _loaded
+    if paddle is None:
+        raise RuntimeError("RapidOCR não carregou.")
+    run_scale_grid(samples, paddle, pack, docs_dir, runs)
     if args.pdf:
         body = [
             f"Motor: {winner}",

@@ -7,7 +7,7 @@ Papel: **detector de carta**. Runs (gitignored): `runs/detection/obb/obb-v6`. Pe
 
 | Item | Valor |
 | --- | --- |
-| Data/hora | 2026-11-05 16:41:15 |
+| Data/hora | 2026-11-08 17:47:07 |
 | SO | Windows 11 |
 | Python | 3.14.7 |
 | PyTorch | 2.11.0+cu128 |
@@ -18,9 +18,9 @@ Papel: **detector de carta**. Runs (gitignored): `runs/detection/obb/obb-v6`. Pe
 | VRAM | 8.0 GB |
 | Dispositivo de treino | 0 |
 | cuDNN | True |
-| cwd | C:\Users\Pichau\Documents\Repositorios\TCGTradeSegmentacao |
-| runs_dir | C:\Users\Pichau\Documents\Repositorios\TCGTradeSegmentacao\runs\detection |
-| weights_dir | C:\Users\Pichau\Documents\Repositorios\TCGTradeSegmentacao\pretrained |
+| cwd | C:\Users\Pichau\OneDrive\Documentos\Repositorios\TCGTradeSegmentacao |
+| runs_dir | C:\Users\Pichau\OneDrive\Documentos\Repositorios\TCGTradeSegmentacao\runs\detection |
+| weights_dir | C:\Users\Pichau\OneDrive\Documentos\Repositorios\TCGTradeSegmentacao\pretrained |
 
 ## Receita
 
@@ -47,27 +47,27 @@ Papel: **detector de carta**. Runs (gitignored): `runs/detection/obb/obb-v6`. Pe
 
 | winner | family | model | task | imgsz | batch | epochs | hours | val_precision | val_recall | val_f1 | val_map50 | val_map75 | val_map50_95 | val_infer_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ← | YOLOv26 | yolo26s-obb.pt | obb | 960 | 4 | 103 | 0.0520 | 0.9999 | 1.0000 | 1.0000 | 0.9950 | 0.9950 | 0.9950 | 8.0394 |
-|  | YOLOv11 | yolo11s-obb.pt | obb | 960 | 4 | 79 | 0.0020 | 0.9980 | 0.9943 | 0.9962 | 0.9950 | 0.9950 | 0.9940 | 7.9746 |
-|  | YOLOv8 | yolov8s-obb.pt | obb | 960 | 4 | 104 | 0.0360 | 0.9980 | 0.9962 | 0.9971 | 0.9950 | 0.9950 | 0.9939 | 9.4263 |
-|  | YOLOv12 | yolo12n-obb.yaml | obb | 960 | 4 | 120 | 0.0340 | 0.9991 | 0.9943 | 0.9967 | 0.9950 | 0.9948 | 0.9894 | 6.7430 |
-|  | RT-DETR-L | rtdetr-l.pt | detect | 640 | 4 | 120 | 0.0910 | 0.9937 | 0.9849 | 0.9893 | 0.9921 | 0.9921 | 0.9595 | 16.25 |
+| ← | YOLOv26 | yolo26s-obb.pt | obb | 960 | 4 | 103 | 0.0620 | 0.9999 | 1.0000 | 1.0000 | 0.9950 | 0.9950 | 0.9950 | 11.27 |
+|  | YOLOv11 | yolo11s-obb.pt | obb | 960 | 4 | 79 | 0.0020 | 0.9980 | 0.9943 | 0.9962 | 0.9950 | 0.9950 | 0.9940 | 11.34 |
+|  | YOLOv8 | yolov8s-obb.pt | obb | 960 | 4 | 104 | 0.0390 | 0.9980 | 0.9962 | 0.9971 | 0.9950 | 0.9950 | 0.9939 | 11.14 |
+|  | YOLOv12 | yolo12n-obb.yaml | obb | 960 | 4 | 120 | 0.0430 | 0.9991 | 0.9943 | 0.9967 | 0.9950 | 0.9948 | 0.9894 | 8.0855 |
+|  | RT-DETR-L | rtdetr-l.pt | detect | 640 | 4 | 120 | 0.1000 | 0.9937 | 0.9849 | 0.9893 | 0.9921 | 0.9921 | 0.9595 | 22.89 |
 
 ## Ranking — teste (todas as famílias)
 
 | winner | family | test_precision | test_recall | test_f1 | test_map50 | test_map75 | test_map50_95 | test_infer_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ← | YOLOv26 | 1.0000 | 1.0000 | 1.0000 | 0.9950 | 0.9950 | 0.9949 | 9.7248 |
-|  | YOLOv11 | 1.0000 | 0.9999 | 1.0000 | 0.9950 | 0.9950 | 0.9939 | 8.3215 |
-|  | YOLOv8 | 0.9996 | 1.0000 | 0.9998 | 0.9950 | 0.9950 | 0.9931 | 9.7286 |
-|  | YOLOv12 | 0.9895 | 1.0000 | 0.9947 | 0.9949 | 0.9949 | 0.9860 | 8.8289 |
-|  | RT-DETR-L | 0.9941 | 0.9951 | 0.9946 | 0.9950 | 0.9950 | 0.9478 | 17.78 |
+| ← | YOLOv26 | 1.0000 | 1.0000 | 1.0000 | 0.9950 | 0.9950 | 0.9949 | 13.75 |
+|  | YOLOv11 | 1.0000 | 0.9999 | 1.0000 | 0.9950 | 0.9950 | 0.9939 | 11.98 |
+|  | YOLOv8 | 0.9996 | 1.0000 | 0.9998 | 0.9950 | 0.9950 | 0.9931 | 12.11 |
+|  | YOLOv12 | 0.9895 | 1.0000 | 0.9947 | 0.9949 | 0.9949 | 0.9860 | 10.28 |
+|  | RT-DETR-L | 0.9941 | 0.9951 | 0.9946 | 0.9950 | 0.9950 | 0.9478 | 23.94 |
 
 ## Modelo eleito
 
 **YOLOv26** (`yolo26`, checkpoint `yolo26s-obb.pt`).
 
-- val mAP50-95 = **0.9950** · mAP75 = 0.9950 · F1 = 1.000 · 8.0 ms
+- val mAP50-95 = **0.9950** · mAP75 = 0.9950 · F1 = 1.000 · 11.3 ms
 - test mAP50-95 = **0.9949** · mAP75 = 0.9950 · F1 = 1.000
 - Peso copiado para `models/obb-v6.pt`.
 

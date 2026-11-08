@@ -17,7 +17,7 @@ A eleição dos pesos (obb-v6 / ocr-roi-v3) está nos READMEs de `train/`.
 
 ## Resultado
 
-**Catalog hit 2309/2677 (86.3%)**. Um acerto é o número e a coleção da carta catalogada iguais aos da anotação. O nome em português ou inglês não entra nessa conta.
+**Catalog hit 2385/2677 (89.1%)**. Um acerto é o número e a coleção da carta catalogada iguais aos da anotação. O nome em português ou inglês não entra nessa conta.
 
 ## Métricas por etapa
 
@@ -69,13 +69,13 @@ A eleição dos pesos (obb-v6 / ocr-roi-v3) está nos READMEs de `train/`.
 
 | Métrica | Valor |
 | --- | --- |
-| accuracy vs set name | 6.9% |
+| accuracy vs set name | 8.3% |
 
 ### End-to-end
 
 | Métrica | Valor |
 | --- | --- |
-| catalog hit | 86.3% |
+| catalog hit | 89.1% |
 
 ## Figuras
 
