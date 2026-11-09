@@ -2090,6 +2090,53 @@ elif OCR_YAML.is_file() and test_images.is_dir() and any(test_images.iterdir()):
 else:
     print("No ROI test images — skip YOLO mAP. Coverage below is from the PDF pipeline.")
 
+def _set_code(value) -> str:
+    return re.sub(r"[^A-Za-z0-9]", "", str(value or "")).upper()
+
+
+def _as_bool(series: pd.Series) -> pd.Series:
+    return series.astype(str).str.strip().str.lower().isin({"true", "1", "1.0"})
+
+
+def _eval_breakdown(frame: pd.DataFrame) -> dict:
+    """Acerto geral, de SVI em diante, e o que acontece quando o número sai certo."""
+    from train.catalog.synthetic import TEXT_SETS
+
+    hit_name = "id_ok" if "id_ok" in frame.columns else "ok"
+    hit = _as_bool(frame[hit_name]) if hit_name in frame.columns else pd.Series(False, index=frame.index)
+    recent = (
+        frame["gt_set"].map(_set_code).isin(TEXT_SETS)
+        if "gt_set" in frame.columns
+        else pd.Series(False, index=frame.index)
+    )
+    number_ok = _as_bool(frame["ocr_number_ok"]) if "ocr_number_ok" in frame.columns else pd.Series(False, index=frame.index)
+    name_ok = _as_bool(frame["ocr_name_ok"]) if "ocr_name_ok" in frame.columns else pd.Series(False, index=frame.index)
+    set_ok = _as_bool(frame["ocr_set_ok"]) if "ocr_set_ok" in frame.columns else pd.Series(False, index=frame.index)
+    pages = frame.assign(_hit=hit).groupby(frame["image"] if "image" in frame.columns else frame.index)["_hit"]
+    page_all = pages.agg(lambda values: bool(len(values)) and bool(values.all())) if "image" in frame.columns else pd.Series(dtype=bool)
+    return {
+        "n": len(frame),
+        "hits": int(hit.sum()),
+        "recent_n": int(recent.sum()),
+        "recent_hits": int((hit & recent).sum()),
+        "older_n": int((~recent).sum()),
+        "older_hits": int((hit & ~recent).sum()),
+        "number_ok_n": int(number_ok.sum()),
+        "number_ok_hits": int((hit & number_ok).sum()),
+        "number_bad_n": int((~number_ok).sum()),
+        "number_bad_hits": int((hit & ~number_ok).sum()),
+        "misses": int((~hit).sum()),
+        "misses_name_ok": int((~hit & name_ok).sum()),
+        "recent_set_ok": int((set_ok & recent).sum()),
+        "pages": int(page_all.shape[0]),
+        "pages_all_hit": int(page_all.sum()) if len(page_all) else 0,
+    }
+
+
+def _rate_row(stage: str, metric: str, hits: int, total: int) -> dict:
+    return {"stage": stage, "metric": metric, "value": (hits / total) if total else float("nan")}
+
+
 if gt_rows.empty:
     print("No ground-truth rows to score.")
 else:
@@ -2127,6 +2174,17 @@ else:
             {"stage": "OCR number", "metric": "mean CER", "value": float(gt_rows["cer_number"].mean()) if "cer_number" in gt_rows.columns else float("nan")},
             {"stage": "OCR collection", "metric": "accuracy vs set name", "value": n_ocr_set / n_gt},
             {"stage": "End-to-end", "metric": "catalog hit", "value": n_id_ok / n_gt},
+        ]
+    )
+    era = _eval_breakdown(gt_rows)
+    summary_rows.extend(
+        [
+            _rate_row("End-to-end", "catalog hit (SVI em diante)", era["recent_hits"], era["recent_n"]),
+            _rate_row("End-to-end", "catalog hit (antes de SVI)", era["older_hits"], era["older_n"]),
+            _rate_row("End-to-end", "catalog hit (número lido certo)", era["number_ok_hits"], era["number_ok_n"]),
+            _rate_row("End-to-end", "catalog hit (número lido errado)", era["number_bad_hits"], era["number_bad_n"]),
+            _rate_row("End-to-end", "fotos com todas as cartas certas", era["pages_all_hit"], era["pages"]),
+            _rate_row("OCR collection", "accuracy vs set name (SVI em diante)", era["recent_set_ok"], era["recent_n"]),
         ]
     )
     metrics_df = pd.DataFrame(summary_rows)
@@ -2240,9 +2298,35 @@ else:
     fig2.tight_layout()
     fig2_path = OUT_FIGS_DIR / "pipeline_acertos_etapas.png"
     fig2.savefig(fig2_path, dpi=120, bbox_inches="tight")
+
+    fig3, ax3 = plt.subplots(figsize=(7.2, 4.2))
+    era_labels = ["Todas", "SVI em diante", "Antes de SVI"]
+    era_rates = [
+        100 * era["hits"] / era["n"] if era["n"] else 0,
+        100 * era["recent_hits"] / era["recent_n"] if era["recent_n"] else 0,
+        100 * era["older_hits"] / era["older_n"] if era["older_n"] else 0,
+    ]
+    era_text = [
+        f"{era['hits']}/{era['n']}",
+        f"{era['recent_hits']}/{era['recent_n']}",
+        f"{era['older_hits']}/{era['older_n']}",
+    ]
+    bars = ax3.bar(era_labels, era_rates, color=["#2ea44f", "#0969da", "#8250df"])
+    ax3.set_ylim(0, 118)
+    ax3.set_ylabel("% de cartas no catálogo certo")
+    ax3.set_title("Acerto por época do conjunto")
+    for bar, rate, label in zip(bars, era_rates, era_text):
+        ax3.text(bar.get_x() + bar.get_width() / 2, rate + 1.5, f"{rate:.1f}%\n{label}", ha="center", va="bottom", fontsize=9)
+    ax3.spines["top"].set_visible(False)
+    ax3.spines["right"].set_visible(False)
+    fig3.tight_layout()
+    fig3_path = OUT_FIGS_DIR / "pipeline_epocas.png"
+    fig3.savefig(fig3_path, dpi=120, bbox_inches="tight")
+    plt.close(fig3)
     pass  # figuras já são gravadas em output/
     print("Figures:", fig_path)
     print("        ", fig2_path)
+    print("        ", fig3_path)
 
 
 
@@ -2308,23 +2392,32 @@ def _fmt_pipeline_metric(metric: str, value) -> str:
     return f"{x:.4f}"
 
 
+def _pct(hits: int, total: int) -> str:
+    if not total:
+        return "0/0"
+    return f"{hits}/{total} ({100 * hits / total:.1f}%)"
+
+
 def write_pipeline_readme() -> Path:
     dest = OUT_DIR / "README.md"
     metrics_path = OUT_TABLES_DIR / "pipeline_metrics.csv"
     eval_path = OUT_TABLES_DIR / "pipeline_eval.csv"
-    n_gt = 0
-    n_ok = 0
+    era = None
     if eval_path.is_file():
-        ev = pd.read_csv(eval_path)
-        n_gt = len(ev)
-        hit_col = "id_ok" if "id_ok" in ev.columns else ("ok" if "ok" in ev.columns else None)
-        if hit_col:
-            n_ok = int(ev[hit_col].astype(bool).sum())
+        era = _eval_breakdown(pd.read_csv(eval_path, dtype=str, keep_default_na=False))
 
     lines = [
         "# Pipeline — avaliação ponta a ponta",
         "",
-        "Relatório gerado por `python pipeline.py`. Mesmo formato dos treinos (`train/detector`, `train/roi`, `train/ocr`). Figuras em `figures/`, tabelas em `tables/`, PDFs em `pdfs/`.",
+        "Relatório gerado por `python pipeline.py`. Ele mede o caminho inteiro: achar a carta na foto, ler o texto e apontar a linha certa do catálogo.",
+        "",
+        "## O que foi feito",
+        "",
+        "Cada foto do conjunto de avaliação entra sozinha. O detector marca as cartas, mesmo tortas. Cada carta é recortada no tamanho físico, 63×88 mm. O segundo modelo marca as faixas de nome, número e coleção, nas duas orientações (em pé e de cabeça para baixo), e fica a que coloca o nome acima do número. O RapidOCR lê essas faixas. Uma nota escolhe a carta no catálogo.",
+        "",
+        "Um acerto é o número e o conjunto da carta escolhida iguais aos da anotação. O nome em português ou inglês não entra nessa conta, porque a mesma carta muda de idioma.",
+        "",
+        f"Quando várias cartas da mesma foto já fecharam o número lido com o número escolhido, e pelo menos {PAGE_SET_SHARE:.0%} delas apontam o mesmo conjunto, as outras cartas dessa foto sem coleção lida são procuradas de novo só nesse conjunto. Se a nota empata, ganha quem tem mais dígitos em comum com o número lido. Se a quantidade de dígitos também empata, ganha a menor diferença entre os dois números.",
         "",
         "## Configuração",
         "",
@@ -2337,20 +2430,42 @@ def write_pipeline_readme() -> Path:
         "| OCR | RapidOCR (Paddle ONNX) |",
         f"| Dispositivo | `{DEVICE}` |",
         "",
-        "A eleição dos pesos (obb-v6 / ocr-roi-v3) está nos READMEs de `train/`.",
+        "A escolha das redes está nos relatórios de `train/detector` e `train/roi`. A escolha do leitor de texto está em `train/ocr`. Os pesos da nota estão em `train/catalog`.",
         "",
         "## Resultado",
         "",
     ]
-    if n_gt:
-        lines.append(
-            f"**Catalog hit {n_ok}/{n_gt} ({100 * n_ok / n_gt:.1f}%)**. "
-            "Um acerto é o número e a coleção da carta catalogada iguais aos da anotação. "
-            "O nome em português ou inglês não entra nessa conta."
+    if era and era["n"]:
+        lines.extend(
+            [
+                f"**{ _pct(era['hits'], era['n']) }** das cartas anotadas saíram com o número e o conjunto certos.",
+                "",
+                f"De Scarlet & Violet em diante (o código SVI e os conjuntos que vieram depois), o acerto é **{_pct(era['recent_hits'], era['recent_n'])}**. Nessas coleções o código do conjunto vem impresso na carta. Nas coleções anteriores, **{_pct(era['older_hits'], era['older_n'])}**.",
+                "",
+                f"Quando o número foi lido certo, o catálogo acertou **{_pct(era['number_ok_hits'], era['number_ok_n'])}**. Quando o número saiu errado, o acerto cai para **{_pct(era['number_bad_hits'], era['number_bad_n'])}**. Das {era['misses']} cartas erradas, {era['misses_name_ok']} ainda tinham o nome certo: o que falta, na maior parte, é o número.",
+                "",
+                f"Em **{_pct(era['pages_all_hit'], era['pages'])}** das fotos, todas as cartas da imagem acertaram.",
+                "",
+                f"O símbolo da coleção, comparado ao código do conjunto, acerta **{_pct(era['recent_set_ok'], era['recent_n'])}** nas cartas de SVI em diante. Nas coleções anteriores essa leitura não tem um código impresso para conferir, então o número geral da coleção fica baixo e não descreve essas cartas novas.",
+                "",
+            ]
         )
     else:
         lines.append("_Sem `tables/pipeline_eval.csv`. Rode `python pipeline.py`._")
-    lines.append("")
+        lines.append("")
+    lines.extend(
+        [
+            "## Como ler as etapas",
+            "",
+            "- **Detected**: a carta foi encontrada na foto e a caixa cobre a carta anotada.",
+            "- **Precision**: das caixas desenhadas, a fração que corresponde a uma carta anotada. Extra detections são caixas sem carta anotada.",
+            "- **ROI detector / template**: a faixa veio do segundo modelo, ou de um molde fixo quando o modelo não marcou aquela faixa.",
+            "- **OCR accuracy**: o texto lido, depois da limpeza, é igual ao anotado naquela faixa.",
+            "- **CER**: fração de caracteres que precisariam ser corrigidos. Zero é uma leitura perfeita. 0,200 quer dizer que cerca de um quinto dos caracteres está errado.",
+            "- **Catalog hit**: a carta escolhida no catálogo é a anotada. É o número que resume a pipeline.",
+            "",
+        ]
+    )
 
     if metrics_path.is_file():
         metrics_df = pd.read_csv(metrics_path)
@@ -2372,6 +2487,7 @@ def write_pipeline_readme() -> Path:
     )
     figures = [
         ("Funil, ROI, OCR e catálogo", OUT_FIGS_DIR / "pipeline_acertos.png"),
+        ("Acerto por época do conjunto", OUT_FIGS_DIR / "pipeline_epocas.png"),
         ("Etapas por imagem", OUT_FIGS_DIR / "pipeline_acertos_etapas.png"),
         ("Erros", OUT_FIGS_DIR / "pipeline_erros.png"),
     ]

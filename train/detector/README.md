@@ -2,12 +2,31 @@
 
 Relatório gerado por `python -m train detector`. Este arquivo é o artefato **versionado no GitHub**: tabelas de todas as famílias, gráficos comprimidos de todas elas, e uma seção do modelo eleito. O PDF opcional (`report.pdf`) serve para o TCC e **não entra no git**.
 
-Papel: **detector de carta**. Runs (gitignored): `runs/detection/obb/obb-v6`. Peso de produção: `models/obb-v6.pt`.
+Papel: **detector de carta**. Os pesos de todas as redes ficam em `runs/detection/obb/obb-v6` e não entram no git. O peso eleito é copiado para `models/obb-v6.pt`, e é esse arquivo que a pipeline usa.
+
+## O que este modelo faz
+
+Este modelo olha uma foto e marca cada carta. A carta pode estar torta na mesa, então a caixa é um retângulo que gira junto com ela. O treino mostra fotos em que uma pessoa já desenhou essas caixas e ajusta a rede até as caixas dela coincidirem.
+
+As fotos são divididas em três grupos. O treino ensina. A validação escolhe qual rede fica. O teste só confere, no fim, se o modelo não decorou as fotos em que aprendeu. O teste não participa da escolha.
+
+O treino pode ir até 300 passadas pelas fotos. Se a validação ficar 40 passadas sem melhorar, ele para. As fotos de treino são giradas, deslocadas e têm a cor alterada, para o modelo não depender de uma iluminação só. Montar um mosaico com várias fotos, ou misturar duas fotos, fica desligado: a carta precisa continuar um retângulo inteiro.
+
+## Como ler a nota
+
+- **Precisão**: das caixas que o modelo desenhou, a fração que cobre um objeto anotado.
+- **Recall**: dos objetos anotados, a fração que o modelo encontrou.
+- **F1**: um meio-termo entre as duas. 1,00 seria achar todos e não inventar nenhum.
+- **mAP50**: a caixa precisa cobrir pelo menos metade do objeto. É uma nota generosa.
+- **mAP75**: a caixa precisa cobrir pelo menos 75%. Exige um encaixe melhor.
+- **mAP50-95**: a mesma conta repetida de 50% até 95% de cobertura. É a nota que elege o modelo. Mais alta é melhor.
+- **ms**: tempo médio para processar uma imagem na validação. Só desempata quando a mAP50-95 fica igual até a quarta casa, dentro da tolerância.
+
 ## Ambiente
 
 | Item | Valor |
 | --- | --- |
-| Data/hora | 2026-11-08 17:47:07 |
+| Data/hora | 2026-11-08 20:31:38 |
 | SO | Windows 11 |
 | Python | 3.14.7 |
 | PyTorch | 2.11.0+cu128 |
@@ -28,7 +47,7 @@ Papel: **detector de carta**. Runs (gitignored): `runs/detection/obb/obb-v6`. Pe
 - Otimizador: `{'optimizer': 'AdamW', 'lr0': 0.001, 'lrf': 0.01}`
 - Loss: `{'box': 12.0, 'dfl': 2.5, 'angle': 2.0}`
 - Augmentation: `{'degrees': 30.0, 'flipud': 0.5, 'fliplr': 0.5, 'translate': 0.1, 'scale': 0.4, 'shear': 2.0, 'perspective': 0.0, 'hsv_h': 0.02, 'hsv_s': 0.7, 'hsv_v': 0.5, 'bgr': 0.0, 'mosaic': 0.0, 'mixup': 0.0, 'copy_paste': 0.0, 'erasing': 0.0, 'close_mosaic': 0, 'cos_lr': True}`
-- Critério do vencedor: maior **val mAP@0.50:0.95** (4 casas). Só se empatar nessa precisão vai para o menor `val_infer_ms` (o tempo de inferência varia entre `val()`).
+- Critério do vencedor: maior **val mAP@0.50:0.95** (4 casas). Diferença menor que `0.002` conta como empate e fica com o menor `val_infer_ms`.
 - Receita de borda do obb-v5: mosaic/mixup/erasing desligados (o warp 63×88 mm precisa do retângulo da carta).
 - RT-DETR-L não tem OBB oficial no Ultralytics: treina AABB convertido das mesmas anotações e não entra no cropper.
 - YOLOv12 OBB usa o yaml + backbone `yolo12n.pt` (não há checkpoint OBB oficial).
@@ -66,6 +85,8 @@ Papel: **detector de carta**. Runs (gitignored): `runs/detection/obb/obb-v6`. Pe
 ## Modelo eleito
 
 **YOLOv26** (`yolo26`, checkpoint `yolo26s-obb.pt`).
+
+A rede eleita é a que teve a maior mAP50-95 na validação. Ela é a que a pipeline carrega. As outras permanecem na tabela para mostrar a margem: uma diferença de poucos milésimos não troca o modelo.
 
 - val mAP50-95 = **0.9950** · mAP75 = 0.9950 · F1 = 1.000 · 11.3 ms
 - test mAP50-95 = **0.9949** · mAP75 = 0.9950 · F1 = 1.000

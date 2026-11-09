@@ -827,11 +827,13 @@ def _scale_markdown(table: pd.DataFrame, elected: list[dict]) -> str:
     lines = [
         _SCALE_MARK,
         "",
-        "Cada célula é o `exact_clean` daquela altura com aquela transformação. "
-        "Nome, número e coleção são medidos à parte, então cada um pode ficar com uma combinação diferente. "
+        "A faixa lida é pequena. Esta grade aumenta a altura dela, em pixels, e aplica uma transformação de cada vez: "
+        "só ampliar, inverter as cores, aumentar a nitidez ou esticar o contraste. O número também testa uma inversão só dele. "
+        "Nome, número e coleção são medidos separados, então cada um pode ficar com uma combinação diferente. "
+        "A célula é a porcentagem de faixas lidas por igual, depois da limpeza. "
         "A base de produção é 112 px no nome e no número e 80 px na coleção, sem transformação extra. "
-        "Otsu, adaptativo e borda branca ficam de fora: no sweep anterior caíram cerca de 25 p.p. "
-        "Um campo só entra na pipeline se o ganho dele for ≥ 2 p.p.",
+        "Otsu, adaptativo e borda branca ficam de fora: no teste anterior caíram cerca de 25 pontos percentuais. "
+        "Um campo só entra na pipeline se o ganho dele for de pelo menos 2 pontos percentuais.",
         "",
         "![Acerto por altura e transformação](figures/scale_by_field.png)",
         "",

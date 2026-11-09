@@ -33,10 +33,48 @@ def _recipe_lines(cfg: SweepConfig) -> list[str]:
         f"- Otimizador: `{cfg.optim}`",
         f"- Loss: `{cfg.loss}`",
         f"- Augmentation: `{cfg.augment}`",
-        f"- Critério do vencedor: maior **val mAP@0.50:0.95** (4 casas). Só se empatar nessa precisão vai para o menor `val_infer_ms` (o tempo de inferência varia entre `val()`).",
+        f"- Critério do vencedor: maior **val mAP@0.50:0.95** (4 casas). Diferença menor que `{cfg.map_tol}` conta como empate e fica com o menor `val_infer_ms`.",
     ]
     lines.extend(f"- {note}" for note in cfg.notes)
     return lines
+
+
+def _method_lines(cfg: SweepConfig) -> list[str]:
+    if cfg.kind == "detector":
+        role = (
+            "Este modelo olha uma foto e marca cada carta. A carta pode estar torta na mesa, "
+            "então a caixa é um retângulo que gira junto com ela. O treino mostra fotos em que "
+            "uma pessoa já desenhou essas caixas e ajusta a rede até as caixas dela coincidirem."
+        )
+    else:
+        role = (
+            "Este modelo olha a carta já recortada no tamanho físico, 63×88 mm, e marca três faixas: "
+            "o nome, o número e o símbolo da coleção. A coleção não vem impressa em toda carta antiga, "
+            "então essa faixa erra mais e isso não é um defeito da leitura do texto."
+        )
+    return [
+        "## O que este modelo faz",
+        "",
+        role,
+        "",
+        "As fotos são divididas em três grupos. O treino ensina. A validação escolhe qual rede fica. "
+        "O teste só confere, no fim, se o modelo não decorou as fotos em que aprendeu. O teste não participa da escolha.",
+        "",
+        f"O treino pode ir até {cfg.epochs} passadas pelas fotos. Se a validação ficar {cfg.patience} passadas sem melhorar, ele para. "
+        "As fotos de treino são giradas, deslocadas e têm a cor alterada, para o modelo não depender de uma iluminação só. "
+        "Montar um mosaico com várias fotos, ou misturar duas fotos, fica desligado: a carta precisa continuar um retângulo inteiro.",
+        "",
+        "## Como ler a nota",
+        "",
+        "- **Precisão**: das caixas que o modelo desenhou, a fração que cobre um objeto anotado.",
+        "- **Recall**: dos objetos anotados, a fração que o modelo encontrou.",
+        "- **F1**: um meio-termo entre as duas. 1,00 seria achar todos e não inventar nenhum.",
+        "- **mAP50**: a caixa precisa cobrir pelo menos metade do objeto. É uma nota generosa.",
+        "- **mAP75**: a caixa precisa cobrir pelo menos 75%. Exige um encaixe melhor.",
+        "- **mAP50-95**: a mesma conta repetida de 50% até 95% de cobertura. É a nota que elege o modelo. Mais alta é melhor.",
+        "- **ms**: tempo médio para processar uma imagem na validação. Só desempata quando a mAP50-95 fica igual até a quarta casa, dentro da tolerância.",
+        "",
+    ]
 
 
 def write_yolo_readme(cfg: SweepConfig, ranking: pd.DataFrame, winner: pd.Series) -> Path:
@@ -66,8 +104,12 @@ def write_yolo_readme(cfg: SweepConfig, ranking: pd.DataFrame, winner: pd.Series
         "",
         f"Relatório gerado por `python -m train {cfg.kind}`. Este arquivo é o artefato **versionado no GitHub**: tabelas de todas as famílias, gráficos comprimidos de todas elas, e uma seção do modelo eleito. O PDF opcional (`report.pdf`) serve para o TCC e **não entra no git**.",
         "",
-        f"Papel: **{kind_label}**. Runs (gitignored): `{_rel(cfg.repo, cfg.sweep_dir)}`. Peso de produção: `models/{cfg.winner_weight_name or (cfg.name + '.pt')}`."
+        (
+            f"Papel: **{kind_label}**. Os pesos de todas as redes ficam em `{_rel(cfg.repo, cfg.sweep_dir)}` e não entram no git. "
+            f"O peso eleito é copiado para `models/{cfg.winner_weight_name or (cfg.name + '.pt')}`, e é esse arquivo que a pipeline usa."
+        ),
         "",
+        *_method_lines(cfg),
         "## Ambiente",
         "",
     ]
@@ -105,6 +147,9 @@ def write_yolo_readme(cfg: SweepConfig, ranking: pd.DataFrame, winner: pd.Series
             "## Modelo eleito",
             "",
             f"**{winner_family}** (`{winner_id}`, checkpoint `{winner.get('model')}`).",
+            "",
+            "A rede eleita é a que teve a maior mAP50-95 na validação. Ela é a que a pipeline carrega. "
+            "As outras permanecem na tabela para mostrar a margem: uma diferença de poucos milésimos não troca o modelo.",
             "",
             f"- val mAP50-95 = **{fmt(winner.get('val_map50_95'))}** · mAP75 = {fmt(winner.get('val_map75'))} · F1 = {fmt(winner.get('val_f1'), 3)} · {fmt(winner.get('val_infer_ms'), 1)} ms",
         ]
@@ -295,7 +340,21 @@ def write_ocr_readme(
         "",
         intro,
         "",
-        "Ranking: maior **exact_clean** nas caixas legíveis; empate < 1 p.p. desempata no CER; depois latência.",
+        "Ranking: maior **exact_clean** nas caixas legíveis; empate menor que 1 ponto percentual desempata no CER; depois no tempo.",
+        "",
+        "## O que está sendo medido",
+        "",
+        "Cada linha deste teste é uma faixa já recortada à mão, com o texto certo anotado ao lado. "
+        "O teste não inclui o erro de achar a faixa na foto. Por isso o número daqui costuma ser mais alto do que o OCR da pipeline, que parte da foto inteira.",
+        "",
+        "- **exact_clean**: a porcentagem de faixas em que a leitura, depois da mesma limpeza usada na pipeline, fica igual ao texto anotado.",
+        "- **exact_raw**: a mesma conta antes dessa limpeza.",
+        "- **CER**: a fração de caracteres que precisariam ser corrigidos. Zero é uma leitura perfeita. 0,10 quer dizer um caractere errado a cada dez.",
+        "- **vazio_%**: a porcentagem de faixas que saíram sem nenhum texto.",
+        "- **ms/caixa**: o tempo médio para ler uma faixa.",
+        "- **WER_nome**: a fração de palavras erradas, só na faixa do nome.",
+        "",
+        "Uma técnica só substitui a leitura de produção se ganhar pelo menos 2 pontos percentuais e se nenhum tipo de faixa (nome, número ou coleção) cair 1 ponto ou mais.",
         "",
         "## Ambiente",
         "",

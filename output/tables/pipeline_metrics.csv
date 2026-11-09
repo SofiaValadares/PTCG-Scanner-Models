@@ -15,3 +15,9 @@ OCR number,accuracy,0.7710123272319761
 OCR number,mean CER,0.2241160740226859
 OCR collection,accuracy vs set name,0.08330220395965633
 End-to-end,catalog hit,0.8909226746357863
+End-to-end,catalog hit (SVI em diante),0.9784394250513347
+End-to-end,catalog hit (antes de SVI),0.8408690546095127
+End-to-end,catalog hit (número lido certo),0.9966085271317829
+End-to-end,catalog hit (número lido errado),0.5350734094616639
+End-to-end,fotos com todas as cartas certas,0.56951871657754
+OCR collection,accuracy vs set name (SVI em diante),0.22895277207392198

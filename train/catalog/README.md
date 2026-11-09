@@ -2,13 +2,25 @@
 
 Relatório gerado por `python -m train catalog`. Não treina rede: compara pesos da escolha da carta no catálogo em cima das leituras já gravadas.
 
-O peso eleito é o de `pipeline.py` e o da API do site (`ptcg_api/catalog.py`).
+O peso que a pipeline e o site usam é o marcado como `atual` em `pipeline.py` e em `ptcg_api/catalog.py`. A grade pode apontar outro peso. Ele só substitui o atual se a diferença nas fotos reais for clara.
+
+## O que esta conta faz
+
+Depois que o OCR lê a carta, uma nota escolhe a linha do catálogo. A nota soma o quanto o nome parece, se o número de colecionador bate, se o total depois da barra bate e se a coleção bate. Cada parcela tem um peso. Este relatório experimenta combinações desses pesos.
+
+Um acerto é o número e o conjunto iguais à carta verdadeira. O nome em português ou inglês não entra, porque a mesma carta muda de idioma. Sem um número de colecionador na leitura, a carta conta como erro: a conta não chuta.
+
+Se duas cartas ficam com a mesma nota, ganha a que tem mais dígitos em comum com o número lido. Se a quantidade de dígitos também empata, ganha a menor diferença entre os dois números. A ordem do arquivo só decide o que ainda sobrar.
+
+As fotos reais são as leituras gravadas pela pipeline. As sintéticas são cartas do catálogo que não apareceram nessas fotos, com um erro parecido com o do OCR, para ver se o peso funciona fora das fotos que já temos. A eleição olha as fotos reais. As sintéticas ficam ao lado e não escolhem o peso.
+
+Scarlet & Violet, código SVI, é o ponto em que o conjunto passa a vir impresso como texto. As coleções anteriores quase não têm esse código, então a leitura sintética da coleção só é gerada de SVI em diante.
 
 ## Ambiente
 
 | Item | Valor |
 | --- | --- |
-| Data/hora | 2026-11-08 18:36:40 |
+| Data/hora | 2026-11-08 20:48:13 |
 | SO | Windows 11 |
 | Python | 3.14.7 |
 | PyTorch | 2.11.0+cu128 |
